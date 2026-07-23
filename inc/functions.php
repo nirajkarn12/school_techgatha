@@ -1,0 +1,1982 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+function e($value) {
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function getCurrentLang() {
+    $lang = $_SESSION['lang'] ?? 'en';
+    $lang = in_array($lang, ['en', 'ne', 'hi'], true) ? $lang : 'en';
+    return $lang;
+}
+
+function loadLang($key) {
+    $lang = getCurrentLang();
+    $file = __DIR__ . '/lang/' . $lang . '.php';
+    static $cache = [];
+    if (!isset($cache[$lang])) {
+        $cache[$lang] = file_exists($file) ? require $file : [];
+    }
+    if (isset($cache[$lang][$key])) {
+        return $cache[$lang][$key];
+    }
+    if ($lang !== 'en') {
+        if (!isset($cache['en'])) {
+            $enFile = __DIR__ . '/lang/en.php';
+            $cache['en'] = file_exists($enFile) ? require $enFile : [];
+        }
+        if (isset($cache['en'][$key])) {
+            return $cache['en'][$key];
+        }
+    }
+    return $key;
+}
+
+function t($key) {
+    return e(loadLang($key));
+}
+
+function tf($key, ...$args) {
+    $text = loadLang($key);
+    return e($args ? vsprintf($text, $args) : $text);
+}
+
+function langSwitchUrl($code) {
+    $uri = $_SERVER['REQUEST_URI'] ?? '/';
+    $parts = parse_url($uri);
+    $path = $parts['path'] ?? '/';
+    $query = [];
+    if (!empty($parts['query'])) {
+        parse_str($parts['query'], $query);
+    }
+    $query['lang'] = $code;
+    return $path . '?' . http_build_query($query);
+}
+
+function csrfToken() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function verifyCsrf($token) {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], (string) $token);
+}
+
+function setFlash($type, $message) {
+    $_SESSION['flash'] = ['type' => $type, 'message' => $message];
+}
+
+function renderFlash() {
+    if (empty($_SESSION['flash'])) {
+        return '';
+    }
+
+    $flash = $_SESSION['flash'];
+    unset($_SESSION['flash']);
+
+    $type = $flash['type'] ?? 'info';
+    $message = e($flash['message'] ?? '');
+
+    return '<div class="alert alert-' . $type . ' shadow-sm rounded-4">' . $message . '</div>';
+}
+
+function getSiteSetting($field, $default = '') {
+    global $pdo;
+    static $settings = null;
+
+    if ($field === '__refresh__') {
+        $settings = null;
+        return $default;
+    }
+
+    if ($settings === null) {
+        $settings = $pdo->query('SELECT * FROM tbl_settings LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+        if (!$settings) {
+            $settings = [];
+        }
+    }
+
+    $fieldName = preg_replace('/[^a-zA-Z0-9_]/', '', $field);
+    return array_key_exists($fieldName, $settings) && $settings[$fieldName] !== null ? $settings[$fieldName] : $default;
+}
+
+function refreshSiteSettingsCache() {
+    getSiteSetting('__refresh__');
+}
+
+function ensureAuthIntegrations() {
+    global $pdo;
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    $ready = false;
+    $altered = false;
+
+    try {
+        $custCol = $pdo->query("SHOW COLUMNS FROM `tbl_customer` LIKE 'cust_google_id'");
+        if ($custCol && $custCol->rowCount() === 0) {
+            $pdo->exec("ALTER TABLE `tbl_customer` ADD COLUMN `cust_google_id` varchar(64) NOT NULL DEFAULT '' AFTER `cust_email`");
+            $altered = true;
+        }
+
+        $settingCols = [
+            'google_client_id' => "varchar(255) NOT NULL DEFAULT ''",
+            'google_client_secret' => "varchar(255) NOT NULL DEFAULT ''",
+            'recaptcha_site_key' => "varchar(255) NOT NULL DEFAULT ''",
+            'recaptcha_secret_key' => "varchar(255) NOT NULL DEFAULT ''",
+        ];
+        foreach ($settingCols as $column => $definition) {
+            $stmt = $pdo->query("SHOW COLUMNS FROM `tbl_settings` LIKE " . $pdo->quote($column));
+            if ($stmt && $stmt->rowCount() === 0) {
+                $pdo->exec("ALTER TABLE `tbl_settings` ADD COLUMN `{$column}` {$definition}");
+                $altered = true;
+            }
+        }
+
+        if ($altered) {
+            refreshSiteSettingsCache();
+        }
+        $ready = true;
+    } catch (Throwable $e) {
+        $ready = false;
+    }
+
+    return $ready;
+}
+
+function getAuthConfig($key, $default = '') {
+    ensureAuthIntegrations();
+
+    $envMap = [
+        'google_client_id' => 'GOOGLE_CLIENT_ID',
+        'google_client_secret' => 'GOOGLE_CLIENT_SECRET',
+        'recaptcha_site_key' => 'RECAPTCHA_SITE_KEY',
+        'recaptcha_secret_key' => 'RECAPTCHA_SECRET_KEY',
+    ];
+
+    $fromSettings = trim((string) getSiteSetting($key, ''));
+    if ($fromSettings !== '') {
+        return $fromSettings;
+    }
+
+    $envName = $envMap[$key] ?? '';
+    if ($envName !== '') {
+        $fromEnv = getenv($envName);
+        if ($fromEnv !== false && trim((string) $fromEnv) !== '') {
+            return trim((string) $fromEnv);
+        }
+    }
+
+    return $default;
+}
+
+function isGoogleAuthEnabled() {
+    return getAuthConfig('google_client_id') !== '' && getAuthConfig('google_client_secret') !== '';
+}
+
+function isRecaptchaEnabled() {
+    return getAuthConfig('recaptcha_site_key') !== '' && getAuthConfig('recaptcha_secret_key') !== '';
+}
+
+function verifyRecaptcha($response) {
+    if (!isRecaptchaEnabled()) {
+        return true;
+    }
+
+    $response = trim((string) $response);
+    if ($response === '') {
+        return false;
+    }
+
+    $payload = http_build_query([
+        'secret' => getAuthConfig('recaptcha_secret_key'),
+        'response' => $response,
+        'remoteip' => $_SERVER['REMOTE_ADDR'] ?? '',
+    ]);
+
+    $raw = authHttpRequest('https://www.google.com/recaptcha/api/siteverify', $payload, 'application/x-www-form-urlencoded');
+    if ($raw === null) {
+        return false;
+    }
+
+    $data = json_decode($raw, true);
+    return !empty($data['success']);
+}
+
+function authHttpRequest($url, $body = null, $contentType = null, $method = null) {
+    $method = $method ?: ($body === null ? 'GET' : 'POST');
+    $headers = ['Accept: application/json'];
+    if ($contentType) {
+        $headers[] = 'Content-Type: ' . $contentType;
+    }
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_CUSTOMREQUEST => $method,
+        ]);
+        if ($body !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+        $raw = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($raw === false || $code >= 400) {
+            return null;
+        }
+        return $raw;
+    }
+
+    $opts = [
+        'http' => [
+            'method' => $method,
+            'header' => implode("\r\n", $headers),
+            'timeout' => 20,
+            'ignore_errors' => true,
+        ],
+    ];
+    if ($body !== null) {
+        $opts['http']['content'] = $body;
+    }
+    $raw = @file_get_contents($url, false, stream_context_create($opts));
+    return $raw === false ? null : $raw;
+}
+
+function googleAuthRedirectUri() {
+    return BASE_URL . 'account/google-callback.php';
+}
+
+function getGoogleAuthUrl($redirect = '') {
+    if (!isGoogleAuthEnabled()) {
+        return '';
+    }
+
+    $state = bin2hex(random_bytes(16));
+    $_SESSION['google_oauth_state'] = $state;
+    $_SESSION['google_oauth_redirect'] = trim((string) $redirect);
+
+    $params = [
+        'client_id' => getAuthConfig('google_client_id'),
+        'redirect_uri' => googleAuthRedirectUri(),
+        'response_type' => 'code',
+        'scope' => 'openid email profile',
+        'access_type' => 'online',
+        'prompt' => 'select_account',
+        'state' => $state,
+    ];
+
+    return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($params);
+}
+
+function exchangeGoogleAuthCode($code) {
+    $payload = http_build_query([
+        'code' => $code,
+        'client_id' => getAuthConfig('google_client_id'),
+        'client_secret' => getAuthConfig('google_client_secret'),
+        'redirect_uri' => googleAuthRedirectUri(),
+        'grant_type' => 'authorization_code',
+    ]);
+
+    $raw = authHttpRequest('https://oauth2.googleapis.com/token', $payload, 'application/x-www-form-urlencoded');
+    if ($raw === null) {
+        return null;
+    }
+
+    $token = json_decode($raw, true);
+    if (empty($token['access_token'])) {
+        return null;
+    }
+
+    $accessToken = $token['access_token'];
+    $profileRaw = null;
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init('https://www.googleapis.com/oauth2/v3/userinfo');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Accept: application/json',
+            ],
+        ]);
+        $profileRaw = curl_exec($ch);
+        curl_close($ch);
+        if ($profileRaw === false) {
+            return null;
+        }
+    } else {
+        $opts = [
+            'http' => [
+                'method' => 'GET',
+                'header' => "Authorization: Bearer {$accessToken}\r\nAccept: application/json\r\n",
+                'timeout' => 20,
+                'ignore_errors' => true,
+            ],
+        ];
+        $profileRaw = @file_get_contents('https://www.googleapis.com/oauth2/v3/userinfo', false, stream_context_create($opts));
+        if ($profileRaw === false) {
+            return null;
+        }
+    }
+
+    $profile = json_decode($profileRaw, true);
+    if (empty($profile['email'])) {
+        return null;
+    }
+
+    return $profile;
+}
+
+function loginOrRegisterGoogleUser(array $profile) {
+    global $pdo;
+    ensureAuthIntegrations();
+
+    $email = trim((string) ($profile['email'] ?? ''));
+    $googleId = trim((string) ($profile['sub'] ?? ''));
+    $name = trim((string) ($profile['name'] ?? ''));
+    if ($name === '') {
+        $name = trim((string) (($profile['given_name'] ?? '') . ' ' . ($profile['family_name'] ?? '')));
+    }
+    if ($name === '') {
+        $name = strstr($email, '@', true) ?: 'Customer';
+    }
+
+    if ($email === '' || $googleId === '') {
+        return ['ok' => false, 'error' => 'google_auth_failed'];
+    }
+
+    $customer = null;
+    $stmt = $pdo->prepare('SELECT * FROM tbl_customer WHERE cust_google_id = ? LIMIT 1');
+    $stmt->execute([$googleId]);
+    $customer = $stmt->fetch();
+
+    if (!$customer) {
+        $stmt = $pdo->prepare('SELECT * FROM tbl_customer WHERE cust_email = ? LIMIT 1');
+        $stmt->execute([$email]);
+        $customer = $stmt->fetch();
+    }
+
+    if ($customer) {
+        if ((string) ($customer['cust_status'] ?? '1') !== '1') {
+            return ['ok' => false, 'error' => 'account_inactive'];
+        }
+        if (empty($customer['cust_google_id'])) {
+            $pdo->prepare('UPDATE tbl_customer SET cust_google_id = ? WHERE cust_id = ?')
+                ->execute([$googleId, $customer['cust_id']]);
+        }
+        $_SESSION['customer_id'] = $customer['cust_id'];
+        $_SESSION['customer_name'] = $customer['cust_name'];
+        linkGuestBookingsByEmail((int) $customer['cust_id'], $customer['cust_email']);
+        return ['ok' => true, 'new' => false];
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO tbl_customer (cust_name, cust_cname, cust_email, cust_google_id, cust_phone, cust_country, cust_address, cust_city, cust_state, cust_zip, cust_b_name, cust_b_cname, cust_b_phone, cust_b_country, cust_b_address, cust_b_city, cust_b_state, cust_b_zip, cust_s_name, cust_s_cname, cust_s_phone, cust_s_country, cust_s_address, cust_s_city, cust_s_state, cust_s_zip, cust_password, cust_token, cust_datetime, cust_timestamp, cust_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([
+        $name, '', $email, $googleId, '', 0, '', '', '', '', '', '', '', 0, '', '', '', '', '', '', '', 0, '', '', '', '',
+        hashCustomerPassword(bin2hex(random_bytes(16))),
+        '', date('Y-m-d H:i:s'), time(), 1,
+    ]);
+
+    $customerId = (int) $pdo->lastInsertId();
+    linkGuestBookingsByEmail($customerId, $email);
+    $_SESSION['customer_id'] = $customerId;
+    $_SESSION['customer_name'] = $name;
+
+    return ['ok' => true, 'new' => true];
+}
+
+function renderRecaptchaWidget() {
+    if (!isRecaptchaEnabled()) {
+        return '';
+    }
+    $siteKey = e(getAuthConfig('recaptcha_site_key'));
+    return '<div class="g-recaptcha" data-sitekey="' . $siteKey . '"></div>';
+}
+
+function renderRecaptchaScript() {
+    if (!isRecaptchaEnabled()) {
+        return '';
+    }
+    return '<script src="https://www.google.com/recaptcha/api.js" async defer></script>';
+}
+
+function renderGoogleAuthButton($redirect = '') {
+    if (!isGoogleAuthEnabled()) {
+        return '';
+    }
+    $url = e(getGoogleAuthUrl($redirect));
+    $label = t('continue_with_google');
+    return '<a href="' . $url . '" class="btn btn-outline-dark d-flex align-items-center justify-content-center gap-2">'
+        . '<i class="fa-brands fa-google" aria-hidden="true"></i><span>' . $label . '</span></a>';
+}
+
+function renderAuthDivider() {
+    return '<div class="d-flex align-items-center gap-3 my-1">'
+        . '<hr class="flex-grow-1 m-0">'
+        . '<span class="small text-muted text-uppercase">' . t('or') . '</span>'
+        . '<hr class="flex-grow-1 m-0">'
+        . '</div>';
+}
+
+function seoCleanText($value, $maxLen = 0) {
+    $text = trim(preg_replace('/\s+/u', ' ', strip_tags((string) $value)));
+    if ($maxLen > 0 && $text !== '' && mb_strlen($text) > $maxLen) {
+        $text = rtrim(mb_substr($text, 0, $maxLen - 1)) . '…';
+    }
+    return $text;
+}
+
+function seoPick($value, $fallback = '', $maxLen = 0) {
+    $text = seoCleanText($value, $maxLen);
+    if ($text !== '') {
+        return $text;
+    }
+    return seoCleanText($fallback, $maxLen);
+}
+
+function getHomeSeo() {
+    $siteName = (string) getSiteSetting('site_name', SITE_NAME);
+    return [
+        'title' => seoPick(
+            getSiteSetting('meta_title_home', ''),
+            $siteName . ' | Quality Education in Nepal'
+        ),
+        'keywords' => seoPick(
+            getSiteSetting('meta_keyword_home', ''),
+            'Techgatha School, school Nepal, admission, qualified teachers, school gallery, news and events, school calendar'
+        ),
+        'description' => seoPick(
+            getSiteSetting('meta_description_home', ''),
+            loadLang('meta_home_description'),
+            160
+        ),
+    ];
+}
+
+function getSocialProfileUrls() {
+    global $pdo;
+    static $urls = null;
+    if ($urls !== null) {
+        return $urls;
+    }
+    $urls = [];
+    try {
+        $rows = $pdo->query('SELECT social_name, social_url FROM tbl_social')->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {
+            $url = trim((string) ($row['social_url'] ?? ''));
+            if ($url !== '' && preg_match('#^https?://#i', $url)) {
+                $urls[] = $url;
+            }
+        }
+    } catch (Throwable $e) {
+        $urls = [];
+    }
+    return $urls;
+}
+
+function getDefaultSeoJsonLd() {
+    $homeSeo = getHomeSeo();
+    $siteName = (string) getSiteSetting('site_name', SITE_NAME);
+    $siteUrl = rtrim(BASE_URL, '/');
+    $phone = trim((string) getSiteSetting('contact_phone', '+977-9810110800'));
+    $email = trim((string) getSiteSetting('contact_email', ''));
+    $addressText = trim((string) getSiteSetting('contact_address', 'Kathmandu, Nepal'));
+    $logo = (string) getSiteSetting('logo', '');
+    $logoUrl = $logo !== '' ? getProductImage($logo) : (ASSET_URL . 'images/og-default.png');
+    $social = getSocialProfileUrls();
+
+    $website = [
+        '@type' => 'WebSite',
+        '@id' => $siteUrl . '/#website',
+        'url' => $siteUrl,
+        'name' => $siteName,
+        'description' => $homeSeo['description'],
+        'inLanguage' => ['en', 'ne', 'hi'],
+        'publisher' => ['@id' => $siteUrl . '/#business'],
+        'potentialAction' => [
+            '@type' => 'SearchAction',
+            'target' => $siteUrl . '/search.php?q={search_term_string}',
+            'query-input' => 'required name=search_term_string',
+        ],
+    ];
+
+    $business = [
+        '@type' => ['EducationalOrganization', 'School'],
+        '@id' => $siteUrl . '/#business',
+        'name' => $siteName,
+        'alternateName' => [
+            'Techgatha School',
+            'Techgatha',
+        ],
+        'url' => $siteUrl,
+        'description' => $homeSeo['description'],
+        'image' => $logoUrl,
+        'logo' => $logoUrl,
+        'telephone' => $phone !== '' ? $phone : '+977-9810110800',
+        'address' => [
+            '@type' => 'PostalAddress',
+            'streetAddress' => $addressText !== '' ? $addressText : 'Kathmandu, Nepal',
+            'addressLocality' => 'Kathmandu',
+            'addressRegion' => 'Bagmati',
+            'addressCountry' => 'NP',
+        ],
+        'areaServed' => [
+            ['@type' => 'City', 'name' => 'Kathmandu'],
+            ['@type' => 'City', 'name' => 'Lalitpur'],
+            ['@type' => 'City', 'name' => 'Bhaktapur'],
+            ['@type' => 'Country', 'name' => 'Nepal'],
+        ],
+        'priceRange' => '$$',
+        'currenciesAccepted' => 'NPR',
+        'paymentAccepted' => 'Cash, Bank Transfer, Online Payment',
+        'openingHoursSpecification' => [
+            [
+                '@type' => 'OpeningHoursSpecification',
+                'dayOfWeek' => [
+                    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+                ],
+                'opens' => '07:00',
+                'closes' => '20:00',
+            ],
+        ],
+    ];
+
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $business['email'] = $email;
+    }
+    if ($social) {
+        $business['sameAs'] = $social;
+    }
+
+    return [
+        '@context' => 'https://schema.org',
+        '@graph' => [$website, $business],
+    ];
+}
+
+function getStaticPageSeo($prefix) {
+    global $pdo;
+    static $pageRow = null;
+
+    if ($pageRow === null) {
+        try {
+            $pageRow = $pdo->query('SELECT * FROM tbl_page LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $e) {
+            $pageRow = [];
+        }
+    }
+
+    $prefix = preg_replace('/[^a-z_]/', '', strtolower((string) $prefix));
+    $home = getHomeSeo();
+    $defaultTitles = [
+        'about' => loadLang('about'),
+        'contact' => loadLang('contact'),
+        'faq' => loadLang('faqs'),
+    ];
+
+    return [
+        'title' => seoPick($pageRow[$prefix . '_meta_title'] ?? '', $defaultTitles[$prefix] ?? $home['title']),
+        'keywords' => seoPick($pageRow[$prefix . '_meta_keyword'] ?? '', $home['keywords']),
+        'description' => seoPick(
+            $pageRow[$prefix . '_meta_description'] ?? '',
+            seoPick($pageRow[$prefix . '_content'] ?? '', $home['description'], 160),
+            160
+        ),
+    ];
+}
+
+function renderHeroHeadline($customHeading = '') {
+    $heading = trim((string) $customHeading);
+    if ($heading === '') {
+        $heading = loadLang('hero_default_title');
+    }
+
+    $words = preg_split('/\s+/u', $heading, -1, PREG_SPLIT_NO_EMPTY);
+    if (!$words) {
+        return '<h1 class="hero-headline">' . e($heading) . '</h1>';
+    }
+
+    $count = count($words);
+    $parts = [];
+    foreach ($words as $i => $word) {
+        // GEMS-style weight contrast: outer words bold, middle word(s) light
+        $isLight = $count >= 3 && $i > 0 && $i < ($count - 1);
+        $cls = $isLight ? 'hero-word-light' : 'hero-word-strong';
+        $parts[] = '<span class="' . $cls . '">' . e($word) . '</span>';
+    }
+
+    return '<h1 class="hero-headline">' . implode(' ', $parts) . '</h1>';
+}
+
+function applySeoMeta(array $seo) {
+    $result = [
+        'title' => (string) ($seo['title'] ?? ''),
+        'description' => (string) ($seo['description'] ?? ''),
+        'keywords' => (string) ($seo['keywords'] ?? ''),
+    ];
+
+    // Populate caller scope via globals for simple page scripts.
+    $GLOBALS['pageTitle'] = $result['title'] !== '' ? $result['title'] : ($GLOBALS['pageTitle'] ?? '');
+    $GLOBALS['metaDescription'] = $result['description'] !== '' ? $result['description'] : ($GLOBALS['metaDescription'] ?? '');
+    $GLOBALS['metaKeywords'] = $result['keywords'] !== '' ? $result['keywords'] : ($GLOBALS['metaKeywords'] ?? '');
+
+    return $result;
+}
+
+function getInvoiceCompanyProfile() {
+    $logo = (string) getSiteSetting('logo', '');
+    $dueDays = (int) getSiteSetting('invoice_due_days', 30);
+    if ($dueDays <= 0) {
+        $dueDays = 30;
+    }
+    return [
+        'site_name' => (string) getSiteSetting('site_name', SITE_NAME),
+        'logo' => $logo,
+        'logo_url' => getProductImage($logo ?: 'placeholder.png'),
+        'address' => (string) getSiteSetting('contact_address', ''),
+        'email' => (string) getSiteSetting('contact_email', ''),
+        'phone' => (string) getSiteSetting('contact_phone', ''),
+        'copyright' => (string) getSiteSetting('footer_copyright', ''),
+        'about' => (string) getSiteSetting('footer_about', ''),
+        'vat_no' => (string) getSiteSetting('invoice_vat_no', ''),
+        'due_days' => $dueDays,
+        'footer_note' => (string) getSiteSetting('invoice_footer_note', 'Thank you for choosing our cleaning service.'),
+    ];
+}
+
+function getMarqueeNotices() {
+    if (!(int)getSiteSetting('marquee_on_off', 1)) {
+        return array();
+    }
+
+    $raw = trim((string)getSiteSetting('marquee_notices', ''));
+    $notices = array();
+
+    if ($raw !== '') {
+        foreach (preg_split('/\r\n|\r|\n/', $raw) as $line) {
+            $line = trim($line);
+            if ($line !== '') {
+                $notices[] = $line;
+            }
+        }
+    }
+
+    if (!$notices) {
+        $notices = array(
+            loadLang('marquee_1'),
+            loadLang('marquee_2'),
+            loadLang('marquee_3'),
+            loadLang('marquee_4'),
+        );
+    }
+
+    return $notices;
+}
+
+function ensureClientTable() {
+    global $pdo;
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $pdo->query('SELECT 1 FROM tbl_client LIMIT 1');
+        $ready = true;
+    } catch (Throwable $e) {
+        try {
+            $pdo->exec("
+                CREATE TABLE `tbl_client` (
+                  `id` int NOT NULL AUTO_INCREMENT,
+                  `name` varchar(150) NOT NULL DEFAULT '',
+                  `logo` varchar(255) NOT NULL,
+                  `website_url` varchar(255) NOT NULL DEFAULT '',
+                  `status` varchar(20) NOT NULL DEFAULT 'Active',
+                  `sort_order` int NOT NULL DEFAULT 0,
+                  `created_at` datetime DEFAULT NULL,
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            $ready = true;
+        } catch (Throwable $e2) {
+            $ready = false;
+        }
+    }
+
+    return $ready;
+}
+
+function getActiveClients() {
+    global $pdo;
+    if (!ensureClientTable()) {
+        return [];
+    }
+
+    try {
+        $statement = $pdo->query("
+            SELECT id, name, logo, website_url
+            FROM tbl_client
+            WHERE status = 'Active'
+            ORDER BY sort_order ASC, id DESC
+        ");
+        return $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function ensureWhyFeatureTable() {
+    global $pdo;
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $pdo->query('SELECT 1 FROM tbl_why_feature LIMIT 1');
+        $ready = true;
+    } catch (Throwable $e) {
+        try {
+            $pdo->exec("
+                CREATE TABLE `tbl_why_feature` (
+                  `id` int NOT NULL AUTO_INCREMENT,
+                  `title` varchar(255) NOT NULL,
+                  `icon` varchar(255) NOT NULL DEFAULT '',
+                  `icon_class` varchar(100) NOT NULL DEFAULT 'fa-star',
+                  `sort_order` int NOT NULL DEFAULT 0,
+                  `status` varchar(20) NOT NULL DEFAULT 'Active',
+                  `created_at` datetime DEFAULT NULL,
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            $ready = true;
+        } catch (Throwable $e2) {
+            $ready = false;
+            return $ready;
+        }
+    }
+
+    if ($ready) {
+        try {
+            $count = (int) $pdo->query('SELECT COUNT(*) FROM tbl_why_feature')->fetchColumn();
+            if ($count === 0) {
+                $defaults = [
+                    ['40 years of Excellence in Education.', 'fa-award', 1],
+                    ['Winner of Numerous National and Regional Educational Awards.', 'fa-trophy', 2],
+                    ['Well-Equipped Science and Computer Laboratories.', 'fa-flask', 3],
+                    ['Highly trained and Experienced Teachers.', 'fa-chalkboard-user', 4],
+                    ['ECA Training Imparted by Full-time National-Level Coaches.', 'fa-person-running', 5],
+                    ['Psychosocial counsellors and Career counsellors Available.', 'fa-comments', 6],
+                ];
+                $ins = $pdo->prepare('INSERT INTO tbl_why_feature (title, icon_class, sort_order, status, created_at) VALUES (?, ?, ?, ?, NOW())');
+                foreach ($defaults as $row) {
+                    $ins->execute([$row[0], $row[1], $row[2], 'Active']);
+                }
+            }
+        } catch (Throwable $e) {
+            // ignore seed failures
+        }
+    }
+
+    return $ready;
+}
+
+function ensureAchieverTable() {
+    global $pdo;
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $pdo->query('SELECT 1 FROM tbl_achiever LIMIT 1');
+        $ready = true;
+    } catch (Throwable $e) {
+        try {
+            $pdo->exec("
+                CREATE TABLE `tbl_achiever` (
+                  `id` int NOT NULL AUTO_INCREMENT,
+                  `name` varchar(150) NOT NULL,
+                  `photo` varchar(255) NOT NULL DEFAULT '',
+                  `achievement` varchar(255) NOT NULL DEFAULT '',
+                  `year` varchar(20) NOT NULL DEFAULT '',
+                  `sort_order` int NOT NULL DEFAULT 0,
+                  `status` varchar(20) NOT NULL DEFAULT 'Active',
+                  `created_at` datetime DEFAULT NULL,
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            $ready = true;
+        } catch (Throwable $e2) {
+            $ready = false;
+        }
+    }
+
+    return $ready;
+}
+
+function getActiveWhyFeatures() {
+    global $pdo;
+    if (!ensureWhyFeatureTable()) {
+        return [];
+    }
+    try {
+        $statement = $pdo->query("
+            SELECT id, title, icon, icon_class, sort_order
+            FROM tbl_why_feature
+            WHERE status = 'Active'
+            ORDER BY sort_order ASC, id ASC
+        ");
+        return $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function getWhyChooseHeroImage() {
+    $uploadCandidates = [
+        'why-choose-hero.png',
+        'why-choose-hero.jpg',
+        'why-choose-hero.jpeg',
+        'why-choose-hero.webp',
+    ];
+    foreach ($uploadCandidates as $file) {
+        $path = __DIR__ . '/../assets/uploads/' . $file;
+        if (is_file($path)) {
+            return getProductImage($file);
+        }
+    }
+    $heroPath = __DIR__ . '/../assets/hero.png';
+    if (is_file($heroPath)) {
+        $url = ASSET_URL . 'hero.png';
+        $mtime = @filemtime($heroPath);
+        if ($mtime) {
+            $url .= '?v=' . $mtime;
+        }
+        return $url;
+    }
+    return ASSET_URL . 'images/placeholder.svg';
+}
+
+function getActiveAchievers($limit = 0) {
+    global $pdo;
+    if (!ensureAchieverTable()) {
+        return [];
+    }
+    try {
+        $sql = "
+            SELECT id, name, photo, achievement, year, sort_order
+            FROM tbl_achiever
+            WHERE status = 'Active'
+            ORDER BY sort_order ASC, id DESC
+        ";
+        if ($limit > 0) {
+            $sql .= ' LIMIT ' . (int) $limit;
+        }
+        $statement = $pdo->query($sql);
+        return $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function ensureBrochureTable() {
+    global $pdo;
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $pdo->query('SELECT 1 FROM tbl_brochure LIMIT 1');
+        $ready = true;
+    } catch (Throwable $e) {
+        try {
+            $pdo->exec("
+                CREATE TABLE `tbl_brochure` (
+                  `id` int NOT NULL AUTO_INCREMENT,
+                  `title` varchar(255) NOT NULL,
+                  `year` varchar(20) NOT NULL DEFAULT '',
+                  `image` varchar(255) NOT NULL DEFAULT '',
+                  `file` varchar(255) NOT NULL DEFAULT '',
+                  `sort_order` int NOT NULL DEFAULT 0,
+                  `status` varchar(20) NOT NULL DEFAULT 'Active',
+                  `created_at` datetime DEFAULT NULL,
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            $ready = true;
+        } catch (Throwable $e2) {
+            $ready = false;
+        }
+    }
+
+    return $ready;
+}
+
+function getActiveBrochures($limit = 0) {
+    global $pdo;
+    if (!ensureBrochureTable()) {
+        return [];
+    }
+    try {
+        $sql = "
+            SELECT id, title, year, image, file, sort_order
+            FROM tbl_brochure
+            WHERE status = 'Active'
+            ORDER BY sort_order ASC, id DESC
+        ";
+        if ($limit > 0) {
+            $sql .= ' LIMIT ' . (int) $limit;
+        }
+        $statement = $pdo->query($sql);
+        return $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function getProductImage($filename) {
+    if (empty($filename)) {
+        return ASSET_URL . 'images/placeholder.svg';
+    }
+
+    if (preg_match('#^https?://#i', $filename)) {
+        return $filename;
+    }
+
+    $cleanName = ltrim(str_replace('\\', '/', (string) $filename), '/');
+    $possiblePaths = [];
+
+    if (strpos($cleanName, 'assets/uploads/') === 0 || strpos($cleanName, 'uploads/') === 0) {
+        $possiblePaths[] = __DIR__ . '/../' . $cleanName;
+    }
+
+    $possiblePaths[] = __DIR__ . '/../assets/uploads/' . $cleanName;
+    $possiblePaths[] = __DIR__ . '/../assets/uploads/product_photos/' . $cleanName;
+    $possiblePaths[] = __DIR__ . '/../' . $cleanName;
+
+    foreach ($possiblePaths as $path) {
+        if (file_exists($path)) {
+            $relative = ltrim(str_replace('\\', '/', str_replace(__DIR__ . '/../', '', $path)), '/');
+            $url = BASE_URL . $relative;
+            $mtime = @filemtime($path);
+            if ($mtime) {
+                $url .= '?v=' . rawurlencode($mtime . '-' . (int) @filesize($path));
+            }
+            return $url;
+        }
+    }
+
+    return ASSET_URL . 'images/placeholder.png';
+}
+
+function getImageMimeByExtension($ext) {
+    $ext = strtolower((string) $ext);
+    $map = [
+        'ico' => 'image/x-icon',
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+    ];
+    return $map[$ext] ?? 'image/png';
+}
+
+/**
+ * Resolve site favicon from settings (falls back to logo).
+ * @return array{url:string,type:string,file:string,path:string}
+ */
+function getSiteFavicon() {
+    $candidates = [
+        trim((string) getSiteSetting('favicon', '')),
+        trim((string) getSiteSetting('logo', '')),
+    ];
+
+    foreach ($candidates as $file) {
+        if ($file === '') {
+            continue;
+        }
+        $path = __DIR__ . '/../assets/uploads/' . ltrim(str_replace('\\', '/', $file), '/');
+        if (!is_file($path)) {
+            continue;
+        }
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        return [
+            'url' => getProductImage($file),
+            'type' => getImageMimeByExtension($ext),
+            'file' => $file,
+            'path' => $path,
+        ];
+    }
+
+    return ['url' => '', 'type' => '', 'file' => '', 'path' => ''];
+}
+
+function getFacebookPageUrl() {
+    foreach (getSocialLinks() as $link) {
+        $name = strtolower((string) ($link['name'] ?? ''));
+        $url = trim((string) ($link['url'] ?? ''));
+        if ($url !== '' && (strpos($name, 'facebook') !== false || preg_match('#facebook\.com/#i', $url))) {
+            return $url;
+        }
+    }
+    return '';
+}
+
+function getSocialLinks() {
+    global $pdo;
+    $stmt = $pdo->query('SELECT social_name, social_url FROM tbl_social WHERE social_url IS NOT NULL AND TRIM(social_url) <> "" ORDER BY social_name ASC');
+    $rows = $stmt->fetchAll();
+
+    $icons = [
+        'Facebook' => 'fab fa-facebook-f',
+        'Twitter' => 'fab fa-twitter',
+        'Instagram' => 'fab fa-instagram',
+        'LinkedIn' => 'fab fa-linkedin-in',
+        'YouTube' => 'fab fa-youtube',
+        'WhatsApp' => 'fab fa-whatsapp',
+        'Pinterest' => 'fab fa-pinterest-p',
+        'Google Plus' => 'fab fa-google-plus-g',
+        'Snapchat' => 'fab fa-snapchat',
+        'Quora' => 'fab fa-quora',
+        'Reddit' => 'fab fa-reddit-alien',
+    ];
+
+    $links = [];
+    foreach ($rows as $row) {
+        $name = $row['social_name'] ?? '';
+        $url = trim((string) ($row['social_url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+        $links[] = [
+            'name' => $name,
+            'url' => $url,
+            'icon' => $icons[$name] ?? 'fab fa-link',
+        ];
+    }
+
+    return $links;
+}
+
+function normalizeWhatsAppNumber($value) {
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return '';
+    }
+
+    // Already a full WhatsApp / chat URL
+    if (preg_match('#^https?://#i', $raw)) {
+        return $raw;
+    }
+
+    $digits = preg_replace('/\D+/', '', $raw);
+    if ($digits === '') {
+        return '';
+    }
+
+    // Local Nepal mobile numbers like 98xxxxxxxx → add country code
+    if (strlen($digits) === 10 && preg_match('/^9[78]/', $digits)) {
+        $digits = '977' . $digits;
+    }
+
+    return $digits;
+}
+
+function getWhatsAppLink() {
+    global $pdo;
+    static $link = null;
+    if ($link !== null) {
+        return $link;
+    }
+
+    $candidates = [];
+
+    try {
+        $stmt = $pdo->prepare("SELECT social_url FROM tbl_social WHERE social_name = 'WhatsApp' AND social_url IS NOT NULL AND TRIM(social_url) <> '' LIMIT 1");
+        $stmt->execute();
+        $social = trim((string) $stmt->fetchColumn());
+        if ($social !== '') {
+            $candidates[] = $social;
+        }
+    } catch (Throwable $e) {
+        // ignore and fall back
+    }
+
+    $phone = trim((string) getSiteSetting('contact_phone', ''));
+    if ($phone !== '') {
+        $candidates[] = $phone;
+    }
+
+    foreach ($candidates as $candidate) {
+        $normalized = normalizeWhatsAppNumber($candidate);
+        if ($normalized === '') {
+            continue;
+        }
+        if (preg_match('#^https?://#i', $normalized)) {
+            $link = $normalized;
+            return $link;
+        }
+        $link = 'https://wa.me/' . $normalized;
+        return $link;
+    }
+
+    $link = '';
+    return $link;
+}
+
+function getProductGallery($productId) {
+    global $pdo;
+    $stmt = $pdo->prepare('SELECT photo FROM tbl_product_photo WHERE p_id = ? ORDER BY pp_id ASC');
+    $stmt->execute([$productId]);
+    $photos = $stmt->fetchAll();
+
+    if (!$photos) {
+        return [[ 'photo' => getProductImage($productId . '.jpg') ]];
+    }
+
+    $gallery = [];
+    foreach ($photos as $photo) {
+        $gallery[] = [
+            'photo' => getProductImage($photo['photo']),
+        ];
+    }
+    return $gallery;
+}
+
+function getCategoryName($ecatId) {
+    global $pdo;
+    $stmt = $pdo->prepare('SELECT e.ecat_name, m.mcat_name, t.tcat_name FROM tbl_end_category e LEFT JOIN tbl_mid_category m ON m.mcat_id = e.mcat_id LEFT JOIN tbl_top_category t ON t.tcat_id = m.tcat_id WHERE e.ecat_id = ?');
+    $stmt->execute([$ecatId]);
+    return $stmt->fetch();
+}
+
+function getTopCategories() {
+    global $pdo;
+    $stmt = $pdo->prepare('SELECT tcat_id, tcat_name FROM tbl_top_category WHERE show_on_menu = 1 ORDER BY tcat_id ASC');
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+function getMidCategories($tcatId) {
+    global $pdo;
+    $stmt = $pdo->prepare('SELECT mcat_id, mcat_name FROM tbl_mid_category WHERE tcat_id = ? ORDER BY mcat_id ASC');
+    $stmt->execute([$tcatId]);
+    return $stmt->fetchAll();
+}
+
+function getEndCategories($mcatId) {
+    global $pdo;
+    $stmt = $pdo->prepare('SELECT ecat_id, ecat_name FROM tbl_end_category WHERE mcat_id = ? ORDER BY ecat_id ASC');
+    $stmt->execute([$mcatId]);
+    return $stmt->fetchAll();
+}
+
+function cartCount() {
+    return isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0;
+}
+
+function wishCount() {
+    return isset($_SESSION['wishlist']) ? count($_SESSION['wishlist']) : 0;
+}
+
+function compareCount() {
+    return isset($_SESSION['compare']) ? count($_SESSION['compare']) : 0;
+}
+
+function isLoggedIn() {
+    return !empty($_SESSION['customer_id']);
+}
+
+function currentCustomer() {
+    global $pdo;
+    if (!isLoggedIn()) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT * FROM tbl_customer WHERE cust_id = ? LIMIT 1');
+    $stmt->execute([$_SESSION['customer_id']]);
+    return $stmt->fetch();
+}
+
+function verifyPassword($input, $stored) {
+    $stored = (string) $stored;
+    if ($stored === '') {
+        return false;
+    }
+
+    if (password_get_info($stored)['algo'] ?? null) {
+        return password_verify($input, $stored);
+    }
+
+    if (strlen($stored) === 32 && ctype_xdigit($stored)) {
+        return md5($input) === $stored;
+    }
+
+    return hash_equals($stored, (string) $input);
+}
+
+function hashCustomerPassword($password) {
+    return password_hash((string) $password, PASSWORD_DEFAULT);
+}
+
+function safeAccountRedirect($redirect = '') {
+    $redirect = trim((string) $redirect);
+    if ($redirect === '') {
+        return BASE_URL . 'account/profile.php';
+    }
+    if (preg_match('#^https?://#i', $redirect)) {
+        $baseHost = parse_url(BASE_URL, PHP_URL_HOST);
+        $redirectHost = parse_url($redirect, PHP_URL_HOST);
+        if ($redirectHost && $baseHost && strcasecmp($redirectHost, $baseHost) === 0) {
+            return $redirect;
+        }
+        return BASE_URL . 'account/profile.php';
+    }
+    if (strpos($redirect, '//') === 0 || strpos($redirect, '..') !== false) {
+        return BASE_URL . 'account/profile.php';
+    }
+    return BASE_URL . ltrim($redirect, '/');
+}
+
+function linkGuestBookingsByEmail($customerId, $email) {
+    global $pdo;
+    $customerId = (int) $customerId;
+    $email = trim((string) $email);
+    if ($customerId <= 0 || $email === '') {
+        return 0;
+    }
+    $stmt = $pdo->prepare('UPDATE tbl_payment SET customer_id = ? WHERE customer_id = 0 AND customer_email = ?');
+    $stmt->execute([$customerId, $email]);
+    return $stmt->rowCount();
+}
+
+function ensureContactInquiryTable() {
+    global $pdo;
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `tbl_contact_inquiry` (
+              `id` int NOT NULL AUTO_INCREMENT,
+              `name` varchar(150) NOT NULL DEFAULT '',
+              `email` varchar(190) NOT NULL DEFAULT '',
+              `phone` varchar(60) NOT NULL DEFAULT '',
+              `subject` varchar(255) NOT NULL DEFAULT '',
+              `message` text NOT NULL,
+              `created_at` datetime DEFAULT NULL,
+              PRIMARY KEY (`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+        $ready = true;
+    } catch (Throwable $e) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+function handleContactFormSubmission($redirectUrl = '') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['contact_form'])) {
+        return null;
+    }
+
+    if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
+        setFlash('danger', loadLang('invalid_request'));
+        if ($redirectUrl !== '') {
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        return ['type' => 'danger', 'message' => loadLang('invalid_request')];
+    }
+
+    $name = trim((string) ($_POST['contact_name'] ?? ''));
+    $email = trim((string) ($_POST['contact_email'] ?? ''));
+    $phone = trim((string) ($_POST['contact_phone'] ?? ''));
+    $subject = trim((string) ($_POST['contact_subject'] ?? ''));
+    $message = trim((string) ($_POST['contact_message'] ?? ''));
+
+    if ($name === '' || $email === '' || $message === '') {
+        $msg = loadLang('contact_form_required');
+        setFlash('danger', $msg);
+        if ($redirectUrl !== '') {
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        return ['type' => 'danger', 'message' => $msg];
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $msg = loadLang('newsletter_invalid_email');
+        setFlash('danger', $msg);
+        if ($redirectUrl !== '') {
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        return ['type' => 'danger', 'message' => $msg];
+    }
+
+    if ($subject === '') {
+        $subject = 'Website contact from ' . $name;
+    }
+
+    global $pdo;
+    if (ensureContactInquiryTable()) {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO tbl_contact_inquiry (name, email, phone, subject, message, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+            $stmt->execute([$name, $email, $phone, $subject, $message]);
+        } catch (Throwable $e) {
+            // continue to email attempt
+        }
+    }
+
+    $to = trim((string) getSiteSetting('contact_email', SMTP_FROM_EMAIL));
+    $siteName = (string) getSiteSetting('site_name', SITE_NAME);
+    $body = '<p><strong>New contact message from the website</strong></p>';
+    $body .= '<p><strong>Name:</strong> ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '<br>';
+    $body .= '<strong>Email:</strong> ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '<br>';
+    if ($phone !== '') {
+        $body .= '<strong>Phone:</strong> ' . htmlspecialchars($phone, ENT_QUOTES, 'UTF-8') . '<br>';
+    }
+    $body .= '<strong>Subject:</strong> ' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</p>';
+    $body .= '<p>' . nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8')) . '</p>';
+
+    sendCustomerEmail($to, $siteName, $siteName . ' - ' . $subject, $body);
+
+    $ok = loadLang('contact_form_success');
+    setFlash('success', $ok);
+    if ($redirectUrl !== '') {
+        header('Location: ' . $redirectUrl . '#contact');
+        exit;
+    }
+    return ['type' => 'success', 'message' => $ok];
+}
+
+function sendCustomerEmail($toEmail, $toName, $subject, $htmlBody) {
+    $toEmail = trim((string) $toEmail);
+    if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+
+    $phpMailerPath = __DIR__ . '/../PHPMailer/src/PHPMailer.php';
+    if (!is_file($phpMailerPath)) {
+        $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: " . SMTP_FROM_NAME . " <" . SMTP_FROM_EMAIL . ">\r\n";
+        return @mail($toEmail, $subject, $htmlBody, $headers);
+    }
+
+    require_once __DIR__ . '/../PHPMailer/src/Exception.php';
+    require_once __DIR__ . '/../PHPMailer/src/PHPMailer.php';
+    require_once __DIR__ . '/../PHPMailer/src/SMTP.php';
+
+    try {
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USER;
+        $mail->Password = SMTP_PASS;
+        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+        $mail->Port = SMTP_PORT;
+        $mail->CharSet = 'UTF-8';
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addReplyTo(SMTP_REPLYTO_EMAIL, SMTP_REPLYTO_NAME);
+        $mail->addAddress($toEmail, $toName ?: $toEmail);
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $htmlBody;
+        $mail->AltBody = strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $htmlBody));
+        $mail->send();
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function buildProductUrl($productId) {
+    return BASE_URL . 'product.php?id=' . $productId;
+}
+
+if (isset($_GET['lang']) && in_array($_GET['lang'], ['en', 'ne', 'hi'], true)) {
+    $_SESSION['lang'] = $_GET['lang'];
+}
+
+/**
+ * Decode entity-encoded HTML once (when editor saved &lt;li&gt; instead of real tags).
+ */
+function decodeEditorHtml($html) {
+    $html = (string) $html;
+    if ($html === '') {
+        return '';
+    }
+    if (strpos($html, '&lt;') !== false && preg_match('/<(p|ul|ol|li|div|br|strong|em|h[1-6])\b/i', $html) !== 1) {
+        $html = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+    return $html;
+}
+
+/**
+ * Clean WYSIWYG HTML: strip paste junk (Cursor/selection anchors, data-section-id, etc.)
+ * and keep only safe formatting tags.
+ */
+function cleanRichHtml($html) {
+    $html = decodeEditorHtml($html);
+    if (trim($html) === '') {
+        return '';
+    }
+
+    // Remove Cursor / AI paste selection junk
+    $html = preg_replace('/<span[^>]*class="[^"]*PDq2pG_selectionAnchor[^"]*"[^>]*>.*?<\/span>/is', '', $html);
+    $html = preg_replace('/<span[^>]*aria-hidden="true"[^>]*>\s*<\/span>/is', '', $html);
+    $html = preg_replace('/\s+data-(?:section-id|start|end|is-last-node|testid)="[^"]*"/i', '', $html);
+    $html = preg_replace('/\s+(?:data-start|data-end|data-section-id|data-is-last-node)(?:=([\'"])[^\'"]*\1)?/i', '', $html);
+
+    // Drop scripts/styles entirely
+    $html = preg_replace('/<(script|style|iframe|object|embed|link|meta)[^>]*>.*?<\/\1>/is', '', $html);
+    $html = preg_replace('/<(script|style|iframe|object|embed|link|meta)[^>]*\/?>/is', '', $html);
+
+    $allowed = '<p><br><strong><b><em><i><u><ul><ol><li><h1><h2><h3><h4><h5><h6><a><img><span><div><blockquote><table><thead><tbody><tr><th><td><hr>';
+    $html = strip_tags($html, $allowed);
+
+    if (class_exists('DOMDocument')) {
+        $previous = libxml_use_internal_errors(true);
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $wrapped = '<?xml encoding="UTF-8"><div id="rich-root">' . $html . '</div>';
+        $dom->loadHTML($wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $xpath = new DOMXPath($dom);
+
+        foreach ($xpath->query('//*') as $el) {
+            if (!$el->hasAttributes()) {
+                continue;
+            }
+            $remove = [];
+            foreach ($el->attributes as $attr) {
+                $name = strtolower($attr->nodeName);
+                $keep = in_array($name, ['href', 'src', 'alt', 'title', 'target', 'rel', 'class'], true);
+                if (!$keep || strpos($name, 'on') === 0 || strpos($name, 'data-') === 0) {
+                    $remove[] = $attr->nodeName;
+                }
+            }
+            foreach ($remove as $attrName) {
+                $el->removeAttribute($attrName);
+            }
+        }
+
+        foreach ($xpath->query('//a') as $a) {
+            $href = $a->getAttribute('href');
+            if ($href !== '' && !preg_match('#^(https?:|mailto:|tel:|/|#)#i', $href)) {
+                $a->removeAttribute('href');
+            }
+            if ($a->hasAttribute('target')) {
+                $a->setAttribute('rel', 'noopener noreferrer');
+            }
+        }
+
+        $root = $dom->getElementById('rich-root');
+        $clean = '';
+        if ($root) {
+            foreach ($root->childNodes as $child) {
+                $clean .= $dom->saveHTML($child);
+            }
+        }
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $html = $clean !== '' ? $clean : $html;
+    }
+
+    // Tidy empty paragraphs / leftover anchors
+    $html = preg_replace('/<p>(?:\s|&nbsp;)*<\/p>/i', '', $html);
+    $html = preg_replace('/\s{2,}/', ' ', $html);
+
+    return trim($html);
+}
+
+/** Safe HTML output for frontend pages. */
+function renderRichHtml($html, $fallback = '') {
+    $clean = cleanRichHtml($html);
+    return $clean !== '' ? $clean : $fallback;
+}
+
+/** Plain text for cards / meta / excerpts. */
+function plainTextFromHtml($html) {
+    $text = decodeEditorHtml($html);
+    $text = preg_replace('/<span[^>]*class="[^"]*PDq2pG_selectionAnchor[^"]*"[^>]*>.*?<\/span>/is', '', $text);
+    $text = strip_tags($text);
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = preg_replace('/\s+/u', ' ', $text);
+    return trim($text);
+}
+
+function excerpt($text, $limit = 120) {
+    $text = plainTextFromHtml($text);
+    if (mb_strlen($text) <= $limit) {
+        return $text;
+    }
+    return mb_substr($text, 0, $limit) . '...';
+}
+
+function sortOptions($selected = '') {
+    $options = [
+        'newest' => t('sort_newest'),
+        'featured' => t('sort_featured'),
+        'popular' => t('sort_popular'),
+        'alphabetical' => t('sort_alphabetical'),
+    ];
+
+    $html = '';
+    foreach ($options as $value => $label) {
+        $active = $selected === $value ? 'selected' : '';
+        $html .= '<option value="' . $value . '" ' . $active . '>' . $label . '</option>';
+    }
+    return $html;
+}
+
+function ensureServiceLocationColumns(PDO $pdo) {
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    $targets = [
+        'tbl_payment' => ['service_lat', 'service_lng'],
+        'tbl_booking_assignment' => ['service_lat', 'service_lng'],
+    ];
+    foreach ($targets as $table => $columns) {
+        foreach ($columns as $column) {
+            try {
+                $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}` LIKE " . $pdo->quote($column));
+                if ($stmt && $stmt->rowCount() === 0) {
+                    $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` DECIMAL(10,7) NULL");
+                }
+            } catch (Throwable $e) {
+                // Ignore if table is unavailable in older installs.
+            }
+        }
+    }
+}
+
+function normalizeMapCoordinate($value, $min, $max) {
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (!is_numeric($value)) {
+        return null;
+    }
+    $num = (float) $value;
+    if ($num < $min || $num > $max) {
+        return null;
+    }
+    return round($num, 7);
+}
+
+function mapsUrlForCoordinates($lat, $lng, $address = '') {
+    if ($lat !== null && $lng !== null) {
+        return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($lat . ',' . $lng);
+    }
+    return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode((string) $address);
+}
+
+function osmUrlForCoordinates($lat, $lng, $address = '') {
+    if ($lat !== null && $lng !== null) {
+        return 'https://www.openstreetmap.org/?mlat=' . rawurlencode((string) $lat) . '&mlon=' . rawurlencode((string) $lng) . '#map=16/' . rawurlencode((string) $lat) . '/' . rawurlencode((string) $lng);
+    }
+    return 'https://www.openstreetmap.org/search?query=' . rawurlencode((string) $address);
+}
+
+function directionsUrlForCoordinates($lat, $lng, $address = '') {
+    $destination = ($lat !== null && $lng !== null) ? ($lat . ',' . $lng) : (string) $address;
+    return 'https://www.google.com/maps/dir/?api=1&destination=' . rawurlencode($destination);
+}
+
+function renderServiceLocationPicker($options = []) {
+    $addressInput = $options['address_input'] ?? '#service_address';
+    $lat = $options['lat'] ?? '';
+    $lng = $options['lng'] ?? '';
+    $uid = $options['id'] ?? 'serviceLocationPicker';
+    $required = !empty($options['required']);
+    $requiredMessage = loadLang('map_pin_required');
+    ob_start();
+    ?>
+    <div class="alert alert-info border-0 rounded-4 py-2 px-3 mb-2 small">
+      <i class="fa fa-map-marker-alt me-1"></i> <?php echo t('map_pin_required_hint'); ?>
+    </div>
+    <div class="service-location-map-wrap" id="<?php echo e($uid); ?>" data-service-map="picker" data-address-input="<?php echo e($addressInput); ?>" <?php echo $required ? 'data-map-required="1"' : ''; ?> data-required-message="<?php echo e($requiredMessage); ?>">
+      <div class="service-location-map-toolbar">
+        <input type="search" class="form-control form-control-sm" data-map-search placeholder="<?php echo t('map_search_placeholder'); ?>" autocomplete="off">
+        <button type="button" class="btn btn-sm btn-outline-dark" data-map-search-btn><?php echo t('map_search'); ?></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-map-locate-btn><?php echo t('map_use_my_location'); ?></button>
+      </div>
+      <div class="service-location-map-canvas" data-map-canvas></div>
+      <div class="service-location-map-meta" data-map-meta><?php echo t('map_pin_help'); ?></div>
+      <div class="service-location-map-meta" data-map-status></div>
+      <input type="hidden" name="service_lat" data-map-lat value="<?php echo e((string) $lat); ?>" <?php echo $required ? 'data-required="1"' : ''; ?>>
+      <input type="hidden" name="service_lng" data-map-lng value="<?php echo e((string) $lng); ?>" <?php echo $required ? 'data-required="1"' : ''; ?>>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+function renderServiceLocationViewer($options = []) {
+    $lat = $options['lat'] ?? null;
+    $lng = $options['lng'] ?? null;
+    $address = $options['address'] ?? '';
+    $uid = $options['id'] ?? 'serviceLocationViewer';
+    $wrapperClass = $options['class'] ?? '';
+    $google = mapsUrlForCoordinates($lat, $lng, $address);
+    $osm = osmUrlForCoordinates($lat, $lng, $address);
+    $directions = directionsUrlForCoordinates($lat, $lng, $address);
+    ob_start();
+    ?>
+    <div class="<?php echo e($wrapperClass); ?>">
+      <div class="service-location-map-wrap" id="<?php echo e($uid); ?>" data-service-map="view" data-lat="<?php echo e((string) $lat); ?>" data-lng="<?php echo e((string) $lng); ?>" data-address="<?php echo e($address); ?>">
+        <div class="service-location-map-canvas" data-map-canvas></div>
+        <div class="service-location-map-meta" data-map-meta></div>
+        <div class="service-location-map-actions">
+          <a class="btn btn-success btn-sm" data-map-directions href="<?php echo e($directions); ?>" target="_blank" rel="noopener"><i class="fa fa-location-arrow"></i> <?php echo t('map_get_directions'); ?></a>
+          <a class="btn btn-primary btn-sm" data-map-google href="<?php echo e($google); ?>" target="_blank" rel="noopener"><i class="fa fa-map-marker"></i> Google Maps</a>
+          <a class="btn btn-default btn-sm" data-map-osm href="<?php echo e($osm); ?>" target="_blank" rel="noopener">OpenStreetMap</a>
+        </div>
+      </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+function serviceLocationAssets() {
+    static $printed = false;
+    if ($printed) {
+        return '';
+    }
+    $printed = true;
+    return '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">'
+        . '<link rel="stylesheet" href="' . ASSET_URL . 'css/service-location-map.css?v=20260721b">'
+        . '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>'
+        . '<script src="' . ASSET_URL . 'js/service-location-map.js?v=20260721b"></script>';
+}
+
+function schoolLeadershipRoles() {
+    return [
+        'principal' => 'Message from Principal',
+        'chairman' => 'Message from Chairman',
+        'vice_principal' => 'Message from Vice Principal',
+    ];
+}
+
+function getSchoolMessage($role) {
+    global $pdo;
+    static $cache = [];
+    $role = (string) $role;
+    if (array_key_exists($role, $cache)) {
+        return $cache[$role];
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM tbl_school_message WHERE role = ? AND status = 'Active' LIMIT 1");
+        $stmt->execute([$role]);
+        $cache[$role] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        $cache[$role] = null;
+    }
+    return $cache[$role];
+}
+
+function getTeacherLevels($activeOnly = true) {
+    global $pdo;
+    try {
+        $sql = "SELECT * FROM tbl_teacher_level";
+        if ($activeOnly) {
+            $sql .= " WHERE status = 'Active'";
+        }
+        $sql .= ' ORDER BY sort_order ASC, id ASC';
+        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function getQualifiedTeachers($limit = 0) {
+    global $pdo;
+    try {
+        $sql = "
+            SELECT
+                s.*,
+                l.name AS level_name,
+                l.sort_order AS level_sort_order
+            FROM tbl_staff s
+            LEFT JOIN tbl_teacher_level l
+                ON l.id = s.level_id
+               AND l.status = 'Active'
+            WHERE s.status = 'Active'
+              AND s.show_on_website = 1
+            ORDER BY
+                CASE WHEN s.level_id IS NULL OR l.id IS NULL THEN 1 ELSE 0 END ASC,
+                COALESCE(l.sort_order, 9999) ASC,
+                COALESCE(s.sort_order, 0) ASC,
+                s.full_name ASC
+        ";
+        if ($limit > 0) {
+            $sql .= ' LIMIT ' . (int) $limit;
+        }
+        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        try {
+            $sql = "
+                SELECT *
+                FROM tbl_staff
+                WHERE status = 'Active'
+                  AND show_on_website = 1
+                ORDER BY full_name ASC
+            ";
+            if ($limit > 0) {
+                $sql .= ' LIMIT ' . (int) $limit;
+            }
+            return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e2) {
+            return [];
+        }
+    }
+}
+
+function groupTeachersByLevel(array $teachers) {
+    $grouped = [];
+    foreach ($teachers as $teacher) {
+        $levelId = !empty($teacher['level_id']) && !empty($teacher['level_name'])
+            ? (int) $teacher['level_id']
+            : 0;
+        $levelName = $levelId > 0
+            ? (string) $teacher['level_name']
+            : loadLang('team_level_other');
+        $levelSort = $levelId > 0
+            ? (int) ($teacher['level_sort_order'] ?? 9999)
+            : 9999;
+
+        if (!isset($grouped[$levelId])) {
+            $grouped[$levelId] = [
+                'id' => $levelId,
+                'name' => $levelName,
+                'sort_order' => $levelSort,
+                'teachers' => [],
+            ];
+        }
+        $grouped[$levelId]['teachers'][] = $teacher;
+    }
+
+    uasort($grouped, function ($a, $b) {
+        if ($a['sort_order'] === $b['sort_order']) {
+            return $a['id'] <=> $b['id'];
+        }
+        return $a['sort_order'] <=> $b['sort_order'];
+    });
+
+    return array_values($grouped);
+}
+
+function getCalendarEvents($upcomingOnly = true) {
+    global $pdo;
+    try {
+        $sql = "SELECT * FROM tbl_calendar_event WHERE status = 'Active'";
+        if ($upcomingOnly) {
+            $sql .= " AND (event_date >= CURDATE() OR (end_date IS NOT NULL AND end_date >= CURDATE()))";
+        }
+        $sql .= ' ORDER BY event_date ASC, id ASC';
+        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function getActiveVacancies() {
+    global $pdo;
+    try {
+        return $pdo->query("
+            SELECT * FROM tbl_vacancy
+            WHERE status = 'Active'
+              AND (deadline IS NULL OR deadline >= CURDATE())
+            ORDER BY deadline ASC, id DESC
+        ")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function handleCareerFormSubmission($redirectUrl) {
+    global $pdo;
+
+    if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
+        setFlash('danger', loadLang('invalid_request'));
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    $vacancyId = (int) ($_POST['vacancy_id'] ?? 0);
+    $fullName = trim((string) ($_POST['full_name'] ?? ''));
+    $phone = trim((string) ($_POST['phone'] ?? ''));
+    $email = trim((string) ($_POST['email'] ?? ''));
+    $resumeNote = trim((string) ($_POST['resume_note'] ?? ''));
+    $coverLetter = trim((string) ($_POST['cover_letter'] ?? ''));
+
+    if ($vacancyId <= 0 || $fullName === '' || $phone === '' || $email === '') {
+        setFlash('danger', loadLang('career_form_required'));
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    try {
+        $check = $pdo->prepare("SELECT id FROM tbl_vacancy WHERE id = ? AND status = 'Active' LIMIT 1");
+        $check->execute([$vacancyId]);
+        if (!$check->fetch()) {
+            setFlash('danger', loadLang('career_form_required'));
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO tbl_career_application
+            (vacancy_id, full_name, phone, email, resume_note, cover_letter, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'New', NOW())
+        ");
+        $stmt->execute([$vacancyId, $fullName, $phone, $email, $resumeNote, $coverLetter]);
+        setFlash('success', loadLang('career_form_success'));
+    } catch (Throwable $e) {
+        setFlash('danger', loadLang('career_form_error'));
+    }
+
+    header('Location: ' . $redirectUrl);
+    exit;
+}
+
+function handleAdmissionFormSubmission($redirectUrl) {
+    global $pdo;
+
+    if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
+        setFlash('danger', loadLang('invalid_request'));
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    $studentName = trim((string) ($_POST['student_name'] ?? ''));
+    $parentName = trim((string) ($_POST['parent_name'] ?? ''));
+    $phone = trim((string) ($_POST['phone'] ?? ''));
+    $email = trim((string) ($_POST['email'] ?? ''));
+    $classApplied = trim((string) ($_POST['class_applied'] ?? ''));
+    $gender = trim((string) ($_POST['gender'] ?? ''));
+    $dob = trim((string) ($_POST['dob'] ?? ''));
+    $address = trim((string) ($_POST['address'] ?? ''));
+    $previousSchool = trim((string) ($_POST['previous_school'] ?? ''));
+    $message = trim((string) ($_POST['message'] ?? ''));
+
+    if ($studentName === '' || $parentName === '' || $phone === '' || $classApplied === '') {
+        setFlash('danger', loadLang('admission_form_required'));
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    $dobValue = null;
+    if ($dob !== '') {
+        $parsed = DateTime::createFromFormat('Y-m-d', $dob);
+        if ($parsed) {
+            $dobValue = $parsed->format('Y-m-d');
+        }
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO tbl_admission
+            (student_name, dob, gender, class_applied, parent_name, phone, email, address, previous_school, message, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', NOW())
+        ");
+        $stmt->execute([
+            $studentName,
+            $dobValue,
+            $gender,
+            $classApplied,
+            $parentName,
+            $phone,
+            $email,
+            $address,
+            $previousSchool,
+            $message,
+        ]);
+        setFlash('success', loadLang('admission_form_success'));
+    } catch (Throwable $e) {
+        setFlash('danger', loadLang('admission_form_error'));
+    }
+
+    header('Location: ' . $redirectUrl);
+    exit;
+}
+
+/**
+ * @return array{page:int,per_page:int,total:int,total_pages:int,offset:int}
+ */
+function buildPagination($total, $perPage = 12, $pageParam = 'page') {
+    $total = max(0, (int) $total);
+    $perPage = max(1, (int) $perPage);
+    $totalPages = max(1, (int) ceil($total / $perPage));
+    $page = max(1, (int) ($_GET[$pageParam] ?? 1));
+    if ($page > $totalPages) {
+        $page = $totalPages;
+    }
+    return [
+        'page' => $page,
+        'per_page' => $perPage,
+        'total' => $total,
+        'total_pages' => $totalPages,
+        'offset' => ($page - 1) * $perPage,
+    ];
+}
+
+function paginationUrl($page, array $keep = []) {
+    $query = array_merge($_GET, $keep, ['page' => (int) $page]);
+    $path = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
+    return $path . '?' . http_build_query($query);
+}
+
+function renderPagination(array $pagination) {
+    if (($pagination['total_pages'] ?? 1) <= 1) {
+        return '';
+    }
+
+    $page = (int) $pagination['page'];
+    $totalPages = (int) $pagination['total_pages'];
+    $html = '<nav class="school-pagination" aria-label="Pagination"><ul>';
+
+    $prevDisabled = $page <= 1 ? ' is-disabled' : '';
+    $html .= '<li class="' . $prevDisabled . '"><a href="' . e(paginationUrl(max(1, $page - 1))) . '"' . ($page <= 1 ? ' tabindex="-1" aria-disabled="true"' : '') . '><i class="fa fa-chevron-left"></i> ' . e(loadLang('previous')) . '</a></li>';
+
+    $start = max(1, $page - 2);
+    $end = min($totalPages, $page + 2);
+    if ($start > 1) {
+        $html .= '<li><a href="' . e(paginationUrl(1)) . '">1</a></li>';
+        if ($start > 2) {
+            $html .= '<li class="is-ellipsis"><span>&hellip;</span></li>';
+        }
+    }
+    for ($i = $start; $i <= $end; $i++) {
+        $active = $i === $page ? ' is-active' : '';
+        $html .= '<li class="' . $active . '"><a href="' . e(paginationUrl($i)) . '">' . $i . '</a></li>';
+    }
+    if ($end < $totalPages) {
+        if ($end < $totalPages - 1) {
+            $html .= '<li class="is-ellipsis"><span>&hellip;</span></li>';
+        }
+        $html .= '<li><a href="' . e(paginationUrl($totalPages)) . '">' . $totalPages . '</a></li>';
+    }
+
+    $nextDisabled = $page >= $totalPages ? ' is-disabled' : '';
+    $html .= '<li class="' . $nextDisabled . '"><a href="' . e(paginationUrl(min($totalPages, $page + 1))) . '"' . ($page >= $totalPages ? ' tabindex="-1" aria-disabled="true"' : '') . '>' . e(loadLang('next')) . ' <i class="fa fa-chevron-right"></i></a></li>';
+    $html .= '</ul></nav>';
+    return $html;
+}

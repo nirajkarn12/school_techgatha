@@ -1980,3 +1980,21 @@ function renderPagination(array $pagination) {
     $html .= '</ul></nav>';
     return $html;
 }
+
+
+function getVacancyById($id)
+{
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM tbl_vacancy
+        WHERE id = ?
+          AND status = 'Active'
+        LIMIT 1
+    ");
+
+    $stmt->execute([$id]);
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}

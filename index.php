@@ -368,6 +368,11 @@ document.addEventListener('DOMContentLoaded', function () {
   </div>
 </section>
 <?php } ?>
+<section class="site-ribbon site-ribbon-c reveal">
+
+   <?php include __DIR__ . '/inc/partials/marquee-ribbon.php'; ?>
+
+</section>
 
 <?php include __DIR__ . '/inc/partials/brochure-section.php'; ?>
 

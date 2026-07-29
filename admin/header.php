@@ -145,6 +145,7 @@ if(!isset($_SESSION['user'])) {
                             <li><a href="achiever.php"><i class="fa fa-circle-o"></i> High Achievers</a></li>
                             <li><a href="brochure.php"><i class="fa fa-circle-o"></i> Brochure & Prospectus</a></li>
                             <li><a href="client.php"><i class="fa fa-circle-o"></i> Partner Logos</a></li>
+                            <li><a href="election.php"><i class="fa fa-circle-o"></i> Student Election</a></li>
                         </ul>
                     </li>
 

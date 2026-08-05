@@ -130,7 +130,7 @@ if(!isset($_SESSION['user'])) {
                         </ul>
                     </li>
 
-                    <li class="treeview <?php if(in_array($cur_page, ['slider.php', 'product.php', 'product-add.php', 'product-edit.php', 'client.php', 'client-add.php', 'client-edit.php', 'why-feature.php', 'why-feature-add.php', 'why-feature-edit.php', 'achiever.php', 'achiever-add.php', 'achiever-edit.php', 'brochure.php', 'brochure-add.php', 'brochure-edit.php'], true)) {echo 'active';} ?>">
+                    <li class="treeview <?php if(in_array($cur_page, ['slider.php', 'product.php', 'product-add.php', 'product-edit.php', 'client.php', 'client-add.php', 'client-edit.php', 'why-feature.php', 'why-feature-add.php', 'why-feature-edit.php', 'achiever.php', 'achiever-add.php', 'achiever-edit.php', 'brochure.php', 'brochure-add.php', 'brochure-edit.php', 'birthday-template.php', 'birthday-template-add.php', 'birthday-template-edit.php', 'birthday.php', 'birthday-add.php', 'birthday-edit.php', 'birthday-delete.php'], true)) {echo 'active';} ?>">
                         <a href="#">
                             <i class="fa fa-home"></i>
                             <span>Homepage</span>
@@ -145,6 +145,8 @@ if(!isset($_SESSION['user'])) {
                             <li><a href="achiever.php"><i class="fa fa-circle-o"></i> High Achievers</a></li>
                             <li><a href="brochure.php"><i class="fa fa-circle-o"></i> Brochure & Prospectus</a></li>
                             <li><a href="client.php"><i class="fa fa-circle-o"></i> Partner Logos</a></li>
+                            <li><a href="birthday-template.php"><i class="fa fa-circle-o"></i> Birthday Templates</a></li>
+                            <li><a href="birthday.php"><i class="fa fa-circle-o"></i> Birthday Students</a></li>
                             <li><a href="election.php"><i class="fa fa-circle-o"></i> Student Election</a></li>
                         </ul>
                     </li>

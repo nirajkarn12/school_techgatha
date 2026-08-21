@@ -58,15 +58,17 @@ if (isset($_POST['form1'])) {
 
 
             /*
-             * Read CSV header
+             * Detect CSV delimiter automatically
              *
-             * IMPORTANT:
-             * Your CSV file is TAB separated.
+             * Supports:
+             * 1. Comma ,
+             * 2. TAB \t
+             * 3. Semicolon ;
              */
 
-            $header = fgetcsv($handle, 0, "\t");
+            $first_line = fgets($handle);
 
-            if ($header === false) {
+            if ($first_line === false) {
 
                 $valid = 0;
                 $error_message .= 'CSV file is empty<br>';
@@ -74,55 +76,110 @@ if (isset($_POST['form1'])) {
             } else {
 
                 /*
-                 * Remove BOM from first column
+                 * Remove BOM before detecting delimiter
                  */
 
-                if (isset($header[0])) {
+                $first_line = preg_replace(
+                    '/^\xEF\xBB\xBF/',
+                    '',
+                    $first_line
+                );
 
-                    $header[0] = preg_replace(
-                        '/^\xEF\xBB\xBF/',
-                        '',
-                        $header[0]
-                    );
+
+                /*
+                 * Detect delimiter
+                 */
+
+                if (substr_count($first_line, "\t") > 0) {
+
+                    $delimiter = "\t";
+
+                } elseif (substr_count($first_line, ';') > 0) {
+
+                    $delimiter = ';';
+
+                } else {
+
+                    $delimiter = ',';
                 }
 
 
                 /*
-                 * Normalize headers
+                 * Go back to beginning of file
                  */
 
-                $header = array_map(function ($value) {
-
-                    return strtolower(trim($value));
-
-                }, $header);
+                rewind($handle);
 
 
                 /*
-                 * Required columns
-                 *
-                 * ONLY ticket_number is required.
+                 * Read CSV header
                  */
 
-                $required_columns = array(
-                    'ticket_number'
+                $header = fgetcsv(
+                    $handle,
+                    0,
+                    $delimiter
                 );
 
 
-                foreach ($required_columns as $required_column) {
+                if ($header === false) {
 
-                    if (!in_array(
-                        $required_column,
-                        $header,
-                        true
-                    )) {
+                    $valid = 0;
+                    $error_message .= 'CSV file is empty<br>';
 
-                        $valid = 0;
+                } else {
 
-                        $error_message .=
-                            'Missing CSV column: ' .
-                            htmlspecialchars($required_column) .
-                            '<br>';
+                    /*
+                     * Remove BOM from first column
+                     */
+
+                    if (isset($header[0])) {
+
+                        $header[0] = preg_replace(
+                            '/^\xEF\xBB\xBF/',
+                            '',
+                            $header[0]
+                        );
+                    }
+
+
+                    /*
+                     * Normalize headers
+                     */
+
+                    $header = array_map(function ($value) {
+
+                        return strtolower(trim($value));
+
+                    }, $header);
+
+
+                    /*
+                     * Required columns
+                     *
+                     * ONLY ticket_number is required.
+                     */
+
+                    $required_columns = array(
+                        'ticket_number'
+                    );
+
+
+                    foreach ($required_columns as $required_column) {
+
+                        if (!in_array(
+                            $required_column,
+                            $header,
+                            true
+                        )) {
+
+                            $valid = 0;
+
+                            $error_message .=
+                                'Missing CSV column: ' .
+                                htmlspecialchars($required_column) .
+                                '<br>';
+                        }
                     }
                 }
             }
@@ -186,11 +243,14 @@ if (isset($_POST['form1'])) {
                 /*
                  * Read CSV rows
                  *
-                 * IMPORTANT:
-                 * Your CSV file is TAB separated.
+                 * Use the SAME delimiter detected above.
                  */
 
-                while (($data = fgetcsv($handle, 0, "\t")) !== false) {
+                while (($data = fgetcsv(
+                    $handle,
+                    0,
+                    $delimiter
+                )) !== false) {
 
                     $row_number++;
 
@@ -203,27 +263,6 @@ if (isset($_POST['form1'])) {
                         count($data) == 1 &&
                         trim($data[0]) == ''
                     ) {
-
-                        continue;
-                    }
-
-
-                    /*
-                     * Validate number of columns
-                     *
-                     * Since optional columns can be missing,
-                     * we only make sure the ticket_number column
-                     * can be read.
-                     */
-
-                    if (count($data) < 1) {
-
-                        $errors[] =
-                            'Row ' .
-                            ($row_number + 1) .
-                            ': Invalid CSV row';
-
-                        $skipped++;
 
                         continue;
                     }
@@ -299,30 +338,9 @@ if (isset($_POST['form1'])) {
 
 
                     /*
-                     * Child name is OPTIONAL.
+                     * Ticket price
                      *
-                     * No validation required.
-                     */
-
-
-                    /*
-                     * Class is OPTIONAL.
-                     *
-                     * No validation required.
-                     */
-
-
-                    /*
-                     * Contact number is OPTIONAL.
-                     *
-                     * No validation required.
-                     */
-
-
-                    /*
-                     * Validate ticket price
-                     *
-                     * If empty, use 0.
+                     * Empty = 0
                      */
 
                     if ($ticket_price == '') {
@@ -348,9 +366,9 @@ if (isset($_POST['form1'])) {
 
 
                     /*
-                     * Validate status
+                     * Status
                      *
-                     * If empty or invalid, use Available.
+                     * Empty/invalid = Available
                      */
 
                     $allowed_statuses = array(
@@ -611,11 +629,8 @@ if (isset($_POST['form1'])) {
                         <div class="form-group">
 
                             <label class="col-sm-2 control-label">
-
                                 CSV File <span>*</span>
-
                             </label>
-
 
                             <div
                                 class="col-sm-6"
@@ -644,7 +659,6 @@ if (isset($_POST['form1'])) {
                                 CSV Format
                             </label>
 
-
                             <div class="col-sm-9">
 
                                 <p>
@@ -654,7 +668,7 @@ if (isset($_POST['form1'])) {
                                 </p>
 
                                 <p>
-                                    The following columns are optional:
+                                    These columns are optional:
                                 </p>
 
                                 <code>
@@ -665,26 +679,29 @@ if (isset($_POST['form1'])) {
                                 <br>
 
                                 <p>
-                                    Example:
+                                    The importer automatically detects
+                                    comma, TAB, or semicolon separated CSV files.
                                 </p>
 
-                                <pre>ticket_number	child_name	class	contact_number	ticket_price	prize	status
-LT-0001	Aarav Sharma	8	9841234567	100	Bicycle	Sold
-LT-0002		9	9851234567	100	School Bag	Available
-LT-0003				100	Gift Hamper	Available</pre>
-
                                 <p class="help-block">
+
                                     <strong>ticket_number</strong>
                                     must be present and must have a value.
+
                                     All other fields can be empty or omitted.
+
                                 </p>
 
                                 <p class="help-block">
+
                                     Existing tickets are matched using
                                     <strong>ticket_number</strong>.
+
                                     If the ticket number already exists,
                                     the ticket will be updated.
+
                                     Otherwise, a new ticket will be created.
+
                                 </p>
 
                             </div>

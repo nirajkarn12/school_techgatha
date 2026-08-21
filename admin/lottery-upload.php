@@ -59,9 +59,12 @@ if (isset($_POST['form1'])) {
 
             /*
              * Read CSV header
+             *
+             * IMPORTANT:
+             * Your CSV file is TAB separated.
              */
 
-            $header = fgetcsv($handle);
+            $header = fgetcsv($handle, 0, "\t");
 
             if ($header === false) {
 
@@ -97,16 +100,12 @@ if (isset($_POST['form1'])) {
 
                 /*
                  * Required columns
+                 *
+                 * ONLY ticket_number is required.
                  */
 
                 $required_columns = array(
-                    'ticket_number',
-                    'child_name',
-                    'class',
-                    'contact_number',
-                    'ticket_price',
-                    'prize',
-                    'status'
+                    'ticket_number'
                 );
 
 
@@ -186,9 +185,12 @@ if (isset($_POST['form1'])) {
 
                 /*
                  * Read CSV rows
+                 *
+                 * IMPORTANT:
+                 * Your CSV file is TAB separated.
                  */
 
-                while (($data = fgetcsv($handle)) !== false) {
+                while (($data = fgetcsv($handle, 0, "\t")) !== false) {
 
                     $row_number++;
 
@@ -208,14 +210,18 @@ if (isset($_POST['form1'])) {
 
                     /*
                      * Validate number of columns
+                     *
+                     * Since optional columns can be missing,
+                     * we only make sure the ticket_number column
+                     * can be read.
                      */
 
-                    if (count($data) < count($header)) {
+                    if (count($data) < 1) {
 
                         $errors[] =
                             'Row ' .
                             ($row_number + 1) .
-                            ': Invalid number of columns';
+                            ': Invalid CSV row';
 
                         $skipped++;
 
@@ -239,26 +245,44 @@ if (isset($_POST['form1'])) {
 
 
                     /*
-                     * Get values
+                     * Get values safely
+                     *
+                     * Only ticket_number is required.
                      */
 
-                    $ticket_number = $row['ticket_number'];
+                    $ticket_number = isset($row['ticket_number'])
+                        ? trim($row['ticket_number'])
+                        : '';
 
-                    $child_name = $row['child_name'];
+                    $child_name = isset($row['child_name'])
+                        ? trim($row['child_name'])
+                        : '';
 
-                    $class = $row['class'];
+                    $class = isset($row['class'])
+                        ? trim($row['class'])
+                        : '';
 
-                    $contact_number = $row['contact_number'];
+                    $contact_number = isset($row['contact_number'])
+                        ? trim($row['contact_number'])
+                        : '';
 
-                    $ticket_price = $row['ticket_price'];
+                    $ticket_price = isset($row['ticket_price'])
+                        ? trim($row['ticket_price'])
+                        : '';
 
-                    $prize = $row['prize'];
+                    $prize = isset($row['prize'])
+                        ? trim($row['prize'])
+                        : '';
 
-                    $status = $row['status'];
+                    $status = isset($row['status'])
+                        ? trim($row['status'])
+                        : '';
 
 
                     /*
                      * Validate ticket number
+                     *
+                     * ONLY ticket_number is required.
                      */
 
                     if ($ticket_number == '') {
@@ -275,18 +299,30 @@ if (isset($_POST['form1'])) {
 
 
                     /*
-                     * Validate child name (OPTIONAL – removed required check)
-                     * If empty, we still allow it.
+                     * Child name is OPTIONAL.
+                     *
+                     * No validation required.
                      */
-                    // if ($child_name == '') {
-                    //     $errors[] = 'Row ' . ($row_number + 1) . ': Child name is empty';
-                    //     $skipped++;
-                    //     continue;
-                    // }
+
+
+                    /*
+                     * Class is OPTIONAL.
+                     *
+                     * No validation required.
+                     */
+
+
+                    /*
+                     * Contact number is OPTIONAL.
+                     *
+                     * No validation required.
+                     */
 
 
                     /*
                      * Validate ticket price
+                     *
+                     * If empty, use 0.
                      */
 
                     if ($ticket_price == '') {
@@ -313,6 +349,8 @@ if (isset($_POST['form1'])) {
 
                     /*
                      * Validate status
+                     *
+                     * If empty or invalid, use Available.
                      */
 
                     $allowed_statuses = array(
@@ -352,6 +390,7 @@ if (isset($_POST['form1'])) {
 
                         /*
                          * Existing ticket
+                         *
                          * UPDATE
                          */
 
@@ -374,6 +413,7 @@ if (isset($_POST['form1'])) {
 
                         /*
                          * New ticket
+                         *
                          * INSERT
                          */
 
@@ -433,6 +473,7 @@ if (isset($_POST['form1'])) {
                     if ($updated > 0) {
 
                         if ($success_message != '') {
+
                             $success_message .= '<br>';
                         }
 
@@ -607,11 +648,17 @@ if (isset($_POST['form1'])) {
                             <div class="col-sm-9">
 
                                 <p>
-                                    Your CSV file must contain these columns:
+                                    Only
+                                    <strong>ticket_number</strong>
+                                    is required.
+                                </p>
+
+                                <p>
+                                    The following columns are optional:
                                 </p>
 
                                 <code>
-                                    ticket_number,child_name,class,contact_number,ticket_price,prize,status
+                                    ticket_number, child_name, class, contact_number, ticket_price, prize, status
                                 </code>
 
                                 <br>
@@ -621,17 +668,23 @@ if (isset($_POST['form1'])) {
                                     Example:
                                 </p>
 
-                                <pre>ticket_number,child_name,class,contact_number,ticket_price,prize,status
-LT-0001,Aarav Sharma,Ram Sharma,9841234567,100,Bicycle,Sold
-LT-0002,Anisha Rai,Sita Rai,9851234567,100,School Bag,Available
-LT-0003,Rohan Thapa,Mina Thapa,9861234567,100,Gift Hamper,Available</pre>
+                                <pre>ticket_number	child_name	class	contact_number	ticket_price	prize	status
+LT-0001	Aarav Sharma	8	9841234567	100	Bicycle	Sold
+LT-0002		9	9851234567	100	School Bag	Available
+LT-0003				100	Gift Hamper	Available</pre>
+
+                                <p class="help-block">
+                                    <strong>ticket_number</strong>
+                                    must be present and must have a value.
+                                    All other fields can be empty or omitted.
+                                </p>
 
                                 <p class="help-block">
                                     Existing tickets are matched using
                                     <strong>ticket_number</strong>.
                                     If the ticket number already exists,
-                                    the ticket will be updated. Otherwise,
-                                    a new ticket will be created.
+                                    the ticket will be updated.
+                                    Otherwise, a new ticket will be created.
                                 </p>
 
                             </div>

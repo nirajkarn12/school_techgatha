@@ -56,7 +56,7 @@ if (isset($_POST['form1'])) {
     $hasNewFile = ($fileName !== '' && $fileErr === UPLOAD_ERR_OK && is_uploaded_file($fileTmp));
     if ($hasNewFile) {
         $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-        if (!in_array($fileExt, array('pdf', 'doc', 'docx'), true)) {
+        if (!adminIsAllowedDocumentExt($fileExt)) {
             $valid = 0;
             $error_message .= 'File must be pdf, doc or docx<br>';
             $hasNewFile = false;
@@ -164,7 +164,7 @@ if (isset($_POST['form1'])) {
                         <div class="form-group">
                             <label class="col-sm-2 control-label">Change File</label>
                             <div class="col-sm-6" style="padding-top:5px;">
-                                <input type="file" name="pdf_file" accept=".pdf,.doc,.docx">
+                                <input type="file" name="pdf_file" accept="<?php echo htmlspecialchars(adminDocumentAcceptAttribute()); ?>">
                             </div>
                         </div>
                         <div class="form-group">

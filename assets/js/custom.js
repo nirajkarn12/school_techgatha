@@ -33,7 +33,7 @@
 
         // Carousel - Product
         productCarousel.owlCarousel({
-            loop: true,
+            loop: productCarousel.find('.owl-item, .item').length > 4,
             autoplay: true,
             margin: 15,
             dots: false,
@@ -61,7 +61,7 @@
         });
 
         testimonialCarousel.owlCarousel({
-            loop: true,
+            loop: testimonialCarousel.find('.owl-item, .item').length > 1,
             autoplay: true,
             margin: 15,
             dots: false,

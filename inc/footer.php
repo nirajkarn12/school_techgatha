@@ -5,7 +5,7 @@
 <a href="#" class="back-to-top" id="backToTop" aria-label="<?php echo t('back_to_top'); ?>"><i class="fa fa-arrow-up"></i></a>
 <?php
 $whatsAppLink = getWhatsAppLink();
-if ($whatsAppLink !== '') {
+if (empty($hideWhatsAppFloatingLink) && $whatsAppLink !== '') {
 ?>
 <a href="<?php echo e($whatsAppLink); ?>" class="floating-wa" target="_blank" rel="noreferrer" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
 <?php } ?>

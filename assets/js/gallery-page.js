@@ -52,9 +52,10 @@
             return;
         }
 
-        $('[data-fancybox^="gallery-cat-"], [data-fancybox^="album-"], [data-fancybox="gallery-legacy"]').fancybox({
+        var galleryItems = $('[data-fancybox^="gallery-cat-"], [data-fancybox^="album-"], [data-fancybox="gallery-legacy"]');
+        galleryItems.fancybox({
             buttons: ['slideShow', 'fullScreen', 'thumbs', 'zoom', 'close'],
-            loop: true,
+            loop: galleryItems.length > 1,
             protect: true,
             animationEffect: 'zoom-in-out',
             transitionEffect: 'slide',

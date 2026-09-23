@@ -27,19 +27,18 @@ echo renderBreadcrumbs($breadcrumbs);
 <?php if (!$row) { ?>
   <div class="alert alert-light border rounded-4"><?php echo t('leadership_empty'); ?></div>
 <?php } else { ?>
-  <div class="row g-4 align-items-start">
-    <div class="col-md-4">
-      <div class="card card-hover p-3 text-center">
+  <div class="leadership-profile-shell">
+    <div class="leadership-profile-panel">
+      <div class="leadership-profile-photo-wrap">
         <?php if (!empty($row['photo'])) { ?>
-          <img class="img-fluid rounded-4 mb-3" src="<?php echo getProductImage($row['photo']); ?>" alt="<?php echo e($row['person_name']); ?>">
+          <img class="leadership-profile-photo" src="<?php echo getProductImage($row['photo']); ?>" alt="<?php echo e($row['person_name']); ?>">
         <?php } ?>
-        <h3 class="h5 fw-bold mb-1"><?php echo e($row['person_name'] ?: $pageTitle); ?></h3>
-        <p class="text-muted mb-0"><?php echo e($row['designation'] ?: $roles[$role]); ?></p>
       </div>
-    </div>
-    <div class="col-md-8">
-      <div class="card card-hover p-4">
-        <div class="content-body">
+      <div class="leadership-profile-copy">
+        <div class="section-kicker"><?php echo t('leadership'); ?></div>
+        <h2 class="leadership-profile-name"><?php echo e($row['person_name'] ?: $pageTitle); ?></h2>
+        <p class="leadership-profile-role"><?php echo e($row['designation'] ?: $roles[$role]); ?></p>
+        <div class="content-body leadership-message-copy">
           <?php echo $row['message']; ?>
         </div>
       </div>

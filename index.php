@@ -1,6 +1,22 @@
 <?php
 require_once __DIR__ . '/inc/functions.php';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['whatsapp_action'] ?? '') === 'send_message') {
+  header('Content-Type: application/json; charset=utf-8');
+  if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
+    http_response_code(419);
+    echo json_encode(['ok' => false, 'error' => 'Your session expired. Refresh the page and try again.']);
+    exit;
+  }
+
+  $result = sendWhatsAppCloudMessage($_POST['recipient'] ?? '', $_POST['message'] ?? '');
+  if (!$result['ok']) {
+    http_response_code(400);
+  }
+  echo json_encode($result);
+  exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['contact_form'])) {
     handleContactFormSubmission(BASE_URL . 'index.php');
 }
@@ -57,6 +73,12 @@ try {
     $homeGallery = [];
 }
 $aboutPage = $pdo->query('SELECT about_title, about_content, about_banner FROM tbl_page LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
+$schoolMessages = [];
+try {
+  $schoolMessages = $pdo->query("SELECT role, person_name, designation, photo, message FROM tbl_school_message WHERE role = 'principal' AND status = 'Active' AND TRIM(person_name) <> '' LIMIT 1")->fetchAll();
+} catch (Throwable $e) {
+  $schoolMessages = [];
+}
 $allCalendarEvents = getCalendarEvents(false);
 $calendarEventsJson = array_map(static function ($event) {
     return [
@@ -131,8 +153,29 @@ $aboutCompact = true;
 include __DIR__ . '/inc/partials/about-section.php';
 ?>
 
+<?php if ($schoolMessages) { ?>
+<?php $principal = $schoolMessages[0]; ?>
+<section class="site-ribbon site-ribbon-b principal-divider-ribbon reveal">
+  <div class="site-ribbon-inner principal-story-inner">
+    <figure class="principal-ribbon-media">
+      <img src="<?php echo e(!empty($principal['photo']) ? getProductImage($principal['photo']) : ASSET_URL . 'images/placeholder.svg'); ?>" alt="<?php echo e($principal['person_name']); ?>" loading="lazy">
+    </figure>
+    <div class="site-ribbon-copy principal-ribbon-copy">
+      <div class="section-kicker principal-ribbon-kicker"><?php echo t('leadership'); ?></div>
+      <h2 class="site-ribbon-title principal-ribbon-title"><?php echo e($principal['person_name']); ?></h2>
+      <p class="site-ribbon-text principal-ribbon-designation"><?php echo e($principal['designation'] ?: loadLang('principal_role_label')); ?></p>
+      <?php if (trim((string) ($principal['message'] ?? '')) !== '') { ?>
+      <div class="principal-ribbon-message">
+        <?php echo renderRichHtml($principal['message']); ?>
+      </div>
+      <?php } ?>
+      <a href="<?php echo BASE_URL; ?>leadership.php?role=principal" class="btn btn-light principal-ribbon-link"><?php echo t('read_more'); ?></a>
+    </div>
+  </div>
+</section>
+<?php } ?>
+
 </div>
-<?php include __DIR__ . '/inc/partials/why-choose-section.php'; ?>
 <div class="container page-wrap">
 
 <?php if ($homeServices) { ?>
@@ -181,18 +224,9 @@ include __DIR__ . '/inc/partials/about-section.php';
 </section>
 <?php } ?>
 
-</div>
+<?php include __DIR__ . '/inc/partials/why-choose-section.php'; ?>
 
-<section class="site-ribbon site-ribbon-b reveal">
-  <div class="site-ribbon-inner">
-    <div class="site-ribbon-copy">
-      <div class="site-ribbon-kicker"><?php echo t('ribbon_teams_kicker'); ?></div>
-      <h2 class="site-ribbon-title"><?php echo t('ribbon_teams_title'); ?></h2>
-      <p class="site-ribbon-text"><?php echo t('ribbon_teams_text'); ?></p>
-    </div>
-    <a href="<?php echo BASE_URL; ?>teachers.php" class="btn btn-light btn-lg"><?php echo t('ribbon_teams_cta'); ?></a>
-  </div>
-</section>
+</div>
 
 <div class="container page-wrap">
 
@@ -368,10 +402,15 @@ document.addEventListener('DOMContentLoaded', function () {
   </div>
 </section>
 <?php } ?>
-<section class="site-ribbon site-ribbon-c reveal">
-
-   <?php include __DIR__ . '/inc/partials/marquee-ribbon.php'; ?>
-
+<section class="site-ribbon site-ribbon-b reveal">
+  <div class="site-ribbon-inner">
+    <div class="site-ribbon-copy">
+      <div class="site-ribbon-kicker"><?php echo t('ribbon_teams_kicker'); ?></div>
+      <h2 class="site-ribbon-title"><?php echo t('ribbon_teams_title'); ?></h2>
+      <p class="site-ribbon-text"><?php echo t('ribbon_teams_text'); ?></p>
+    </div>
+    <a href="<?php echo BASE_URL; ?>teachers.php" class="btn btn-light btn-lg"><?php echo t('ribbon_teams_cta'); ?></a>
+  </div>
 </section>
 
 <?php include __DIR__ . '/inc/partials/brochure-section.php'; ?>
@@ -494,4 +533,254 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 <?php endif; ?>
-<?php include __DIR__ . '/inc/footer.php'; ?>
+
+<!-- WhatsApp Chat Widget -->
+<style>
+.whatsapp-chat-widget {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 9999;
+    font-family: inherit;
+}
+.whatsapp-chat-button {
+    width: 58px;
+    height: 58px;
+    border: 0;
+    border-radius: 50%;
+    background: #25D366;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(0,0,0,.20);
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+.whatsapp-chat-button:hover {
+    transform: scale(1.06);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.whatsapp-chat-box {
+    width: 320px;
+    max-width: calc(100vw - 30px);
+    margin-bottom: 12px;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.20);
+    display: none;
+}
+.whatsapp-chat-box.is-open {
+    display: block;
+    animation: whatsappChatIn .2s ease;
+}
+.whatsapp-chat-header {
+    background: #075E54;
+    color: #fff;
+    padding: 15px 16px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+.whatsapp-chat-header-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #25D366;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+.whatsapp-chat-header strong {
+    display: block;
+    font-size: 15px;
+}
+.whatsapp-chat-header small {
+    display: block;
+    margin-top: 2px;
+    opacity: .85;
+    font-size: 12px;
+}
+.whatsapp-chat-body {
+    padding: 16px;
+    background: #f7f7f7;
+}
+.whatsapp-chat-message {
+    background: #fff;
+    border-radius: 4px 14px 14px 14px;
+    padding: 11px 13px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08);
+    margin-bottom: 12px;
+}
+.whatsapp-chat-input {
+    width: 100%;
+    min-height: 44px;
+    resize: vertical;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+    background: #fff;
+}
+.whatsapp-chat-input:focus {
+    border-color: #25D366;
+}
+.whatsapp-chat-phone {
+  margin-bottom: 9px;
+}
+.whatsapp-chat-send {
+    width: 100%;
+    margin-top: 9px;
+    border: 0;
+    border-radius: 10px;
+    background: #25D366;
+    color: #fff;
+    padding: 11px 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.whatsapp-chat-send:hover {
+    background: #20bd5a;
+}
+#whatsappChatStatus {
+  min-height: 18px;
+  margin-top: 8px;
+  color: #555;
+  font-size: 12px;
+}
+@keyframes whatsappChatIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 575px) {
+    .whatsapp-chat-widget {
+        right: 14px;
+        bottom: 14px;
+    }
+    .whatsapp-chat-box {
+        width: min(320px, calc(100vw - 28px));
+    }
+}
+</style>
+
+<div class="whatsapp-chat-widget" aria-label="WhatsApp chat">
+    <div class="whatsapp-chat-box" id="whatsappChatBox">
+        <div class="whatsapp-chat-header">
+            <div class="whatsapp-chat-header-icon"><i class="fa-brands fa-whatsapp"></i></div>
+            <div>
+                <strong><?php echo $brandName; ?></strong>
+                <small>Typically replies quickly</small>
+            </div>
+        </div>
+        <div class="whatsapp-chat-body">
+            <div class="whatsapp-chat-message">
+                Hello! How can we help you today?
+            </div>
+            <textarea
+                id="whatsappChatMessage"
+                class="whatsapp-chat-input"
+                rows="2"
+                placeholder="Type your message..."
+            ></textarea>
+              <input
+                type="tel"
+                id="whatsappChatRecipient"
+                class="whatsapp-chat-input whatsapp-chat-phone"
+                placeholder="WhatsApp number with country code"
+                autocomplete="tel"
+              >
+              <div id="whatsappChatStatus" role="status" aria-live="polite"></div>
+            <button type="button" class="whatsapp-chat-send" id="whatsappChatSend">
+                <i class="fa-brands fa-whatsapp"></i> Send Message
+            </button>
+        </div>
+    </div>
+
+    <button
+        type="button"
+        class="whatsapp-chat-button"
+        id="whatsappChatButton"
+        aria-label="Open WhatsApp chat"
+        aria-expanded="false"
+    >
+        <i class="fa-brands fa-whatsapp"></i>
+    </button>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var chatButton = document.getElementById('whatsappChatButton');
+    var chatBox = document.getElementById('whatsappChatBox');
+    var messageInput = document.getElementById('whatsappChatMessage');
+    var recipientInput = document.getElementById('whatsappChatRecipient');
+    var sendButton = document.getElementById('whatsappChatSend');
+    var status = document.getElementById('whatsappChatStatus');
+
+    if (!chatButton || !chatBox || !messageInput || !recipientInput || !sendButton || !status) return;
+
+    chatButton.addEventListener('click', function () {
+        var isOpen = chatBox.classList.toggle('is-open');
+        chatButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+        if (isOpen) {
+            setTimeout(function () {
+                messageInput.focus();
+            }, 100);
+        }
+    });
+
+    function startWhatsAppChat() {
+        var message = messageInput.value.trim();
+      var recipient = recipientInput.value.trim();
+
+      if (!message || !recipient) {
+        status.textContent = 'Enter your WhatsApp number and message.';
+            return;
+        }
+
+      sendButton.disabled = true;
+      status.textContent = 'Sending...';
+
+      fetch('<?php echo e(BASE_URL . 'index.php'); ?>', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+        body: new URLSearchParams({
+          whatsapp_action: 'send_message',
+          csrf_token: '<?php echo e(csrfToken()); ?>',
+          recipient: recipient,
+          message: message
+        })
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(result) {
+        status.textContent = result.ok ? 'Message sent successfully.' : (result.error || 'Message could not be sent.');
+        if (result.ok) messageInput.value = '';
+      })
+      .catch(function() {
+        status.textContent = 'Unable to connect to the WhatsApp service.';
+      })
+      .finally(function() {
+        sendButton.disabled = false;
+      });
+    }
+
+    sendButton.addEventListener('click', startWhatsAppChat);
+
+    messageInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            startWhatsAppChat();
+        }
+    });
+});
+</script>
+
+<?php $hideWhatsAppFloatingLink = true; include __DIR__ . '/inc/footer.php'; ?>

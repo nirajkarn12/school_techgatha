@@ -38,7 +38,7 @@ if (isset($_POST['form1'])) {
 
 	if ($hasNewPhoto) {
 		$ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-		if (!in_array($ext, array('jpg', 'jpeg', 'png', 'gif', 'webp'), true)) {
+		if (!adminIsAllowedImageExt($ext, false)) {
 			$valid = 0;
 			$error_message .= 'You must upload a jpg, jpeg, png, gif or webp file<br>';
 			$hasNewPhoto = false;
@@ -126,7 +126,7 @@ if (isset($_POST['form1'])) {
 						<div class="form-group">
 							<label for="" class="col-sm-2 control-label">Change Photo</label>
 							<div class="col-sm-6" style="padding-top:5px">
-								<input type="file" name="photo"> (jpg, jpeg, png, gif, webp)
+								<input type="file" name="photo" accept="<?php echo htmlspecialchars(adminImageAcceptAttribute(false)); ?>"> (jpg, jpeg, png, gif, webp)
 							</div>
 						</div>
 						<div class="form-group">

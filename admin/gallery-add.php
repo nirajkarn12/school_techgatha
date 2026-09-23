@@ -27,7 +27,7 @@ if (isset($_POST['form1'])) {
 				continue;
 			}
 			$ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-			if (!in_array($ext, array('jpg', 'jpeg', 'png', 'gif', 'webp'), true)) {
+			if (!adminIsAllowedImageExt($ext, false)) {
 				$valid = 0;
 				$error_message .= htmlspecialchars($name) . ' must be jpg, jpeg, png, gif or webp<br>';
 				continue;
@@ -121,7 +121,7 @@ if (isset($_POST['form1'])) {
 						<div class="form-group">
 							<label for="" class="col-sm-2 control-label">Photos <span>*</span></label>
 							<div class="col-sm-9" style="padding-top:5px">
-								<input type="file" name="photos[]" multiple accept=".jpg,.jpeg,.png,.gif,.webp">
+								<input type="file" name="photos[]" multiple accept="<?php echo htmlspecialchars(adminImageAcceptAttribute(false)); ?>">
 								<small class="text-muted">Select one or more images (jpg, jpeg, png, gif, webp).</small>
 							</div>
 						</div>

@@ -338,15 +338,6 @@ $ogLocale = $ogLocaleMap[$currentHtmlLang] ?? 'en_US';
             <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>"><?php echo t('home'); ?></a></li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="schoolMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <?php echo t('categories'); ?>
-                    </a>
-                    <ul class="dropdown-menu" aria-labelledby="schoolMenuDropdown">
-                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>teachers.php"><?php echo t('our_team_page'); ?></a></li>
-                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>calendar.php"><?php echo t('school_calendar'); ?></a></li>
-                    </ul>
-                </li>
-                <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="aboutMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <?php echo t('about'); ?>
                     </a>
@@ -356,10 +347,21 @@ $ogLocale = $ogLocaleMap[$currentHtmlLang] ?? 'en_US';
                         <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>leadership.php?role=principal"><?php echo t('leadership_principal'); ?></a></li>
                         <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>leadership.php?role=chairman"><?php echo t('leadership_chairman'); ?></a></li>
                         <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>leadership.php?role=vice_principal"><?php echo t('leadership_vice_principal'); ?></a></li>
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>teachers.php"><?php echo t('our_team_page'); ?></a></li>
                     </ul>
                 </li>
-                <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>gallery.php"><?php echo t('gallery'); ?></a></li>
-                <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>blog.php"><?php echo t('blog'); ?></a></li>
+                <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>products.php"><?php echo t('shop'); ?></a></li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="mediaMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <?php echo t('media'); ?>
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="mediaMenuDropdown">
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>blog.php"><?php echo t('blog'); ?></a></li>
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>gallery.php"><?php echo t('gallery'); ?></a></li>
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>calendar.php"><?php echo t('school_calendar'); ?></a></li>
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>brochure.php"><?php echo t('brochure_prospectus'); ?></a></li>
+                    </ul>
+                </li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>careers.php"><?php echo t('careers'); ?></a></li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>contact.php"><?php echo t('contact'); ?></a></li>
             </ul>

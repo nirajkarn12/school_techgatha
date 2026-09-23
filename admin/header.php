@@ -164,11 +164,8 @@ if(!isset($_SESSION['user'])) {
                             <li><a href="birthday-template.php"><i class="fa fa-circle-o"></i> Birthday Templates</a></li>
                             <li><a href="birthday.php"><i class="fa fa-circle-o"></i> Birthday Students</a></li>
                             <li><a href="election.php"><i class="fa fa-circle-o"></i> Student Election</a></li>
-                                    <li>
-            <a href="lottery.php">
-                <i class="fa fa-circle-o"></i> Lottery Tickets
-            </a>
-        </li>
+                            <li><a href="lottery.php"><i class="fa fa-circle-o"></i> Lottery Tickets</a></li>
+                            <li><a href="quiz.php"><i class="fa fa-circle-o"></i> quiz</a></li>
                         </ul>
                     </li>
 

@@ -37,6 +37,18 @@ function adminImageAcceptAttribute($includeIco = false) {
 	return implode(',', array_unique($parts));
 }
 
+function adminAllowedDocumentExtensions() {
+	return array('pdf', 'doc', 'docx');
+}
+
+function adminIsAllowedDocumentExt($ext) {
+	return in_array(strtolower((string) $ext), adminAllowedDocumentExtensions(), true);
+}
+
+function adminDocumentAcceptAttribute() {
+	return '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+}
+
 /**
  * Save an uploaded image into assets/uploads with a stable base name.
  * Deletes previous base-name variants (logo.png vs logo.jpg, etc.).
@@ -517,6 +529,65 @@ function ensureBrochureTable($pdo) {
 	return $ready;
 }
 
+function ensureBirthdayStudentLayoutColumns($pdo) {
+	static $done = null;
+	if ($done !== null) {
+		return $done;
+	}
+
+	$columns = array(
+		'output_x' => 'int NOT NULL DEFAULT 0',
+		'output_y' => 'int NOT NULL DEFAULT 0',
+		'output_width' => 'int NOT NULL DEFAULT 0',
+		'output_height' => 'int NOT NULL DEFAULT 0',
+		'name_x' => 'int NOT NULL DEFAULT 0',
+		'name_y' => 'int NOT NULL DEFAULT 0',
+		'class_x' => 'int NOT NULL DEFAULT 0',
+		'class_y' => 'int NOT NULL DEFAULT 0',
+		'text_size' => 'int NOT NULL DEFAULT 36',
+		'text_color' => "varchar(20) NOT NULL DEFAULT '#0c2b5f'",
+		'text_style' => "varchar(20) NOT NULL DEFAULT 'bold'",
+		'text_shadow' => "varchar(5) NOT NULL DEFAULT '1'",
+		'text_stroke_color' => "varchar(20) NOT NULL DEFAULT '#ffffff'",
+		'text_stroke_width' => 'int NOT NULL DEFAULT 2',
+		'text_stroke_position' => "varchar(20) NOT NULL DEFAULT 'outside'",
+		'font_family' => "varchar(50) NOT NULL DEFAULT 'Poppins'",
+		'name_text_size' => 'int NOT NULL DEFAULT 38',
+		'name_text_style' => "varchar(20) NOT NULL DEFAULT 'bold'",
+		'name_text_color' => "varchar(20) NOT NULL DEFAULT '#0c2b5f'",
+		'name_text_shadow' => "varchar(5) NOT NULL DEFAULT '1'",
+		'name_text_stroke_color' => "varchar(20) NOT NULL DEFAULT '#ffffff'",
+		'name_text_stroke_width' => 'int NOT NULL DEFAULT 2',
+		'name_text_stroke_position' => "varchar(20) NOT NULL DEFAULT 'outside'",
+		'name_font_family' => "varchar(50) NOT NULL DEFAULT 'Poppins'",
+		'name_letter_spacing' => 'int NOT NULL DEFAULT 0',
+		'class_text_size' => 'int NOT NULL DEFAULT 13',
+		'class_text_style' => "varchar(20) NOT NULL DEFAULT 'bold'",
+		'class_text_color' => "varchar(20) NOT NULL DEFAULT '#ffffff'",
+		'class_text_shadow' => "varchar(5) NOT NULL DEFAULT '1'",
+		'class_text_stroke_color' => "varchar(20) NOT NULL DEFAULT '#ffffff'",
+		'class_text_stroke_width' => 'int NOT NULL DEFAULT 0',
+		'class_text_stroke_position' => "varchar(20) NOT NULL DEFAULT 'outside'",
+		'class_font_family' => "varchar(50) NOT NULL DEFAULT 'Poppins'",
+		'class_letter_spacing' => 'int NOT NULL DEFAULT 0',
+		'image_layer' => "varchar(10) NOT NULL DEFAULT 'front'"
+	);
+
+	try {
+		$existing = $pdo->query("SHOW COLUMNS FROM `tbl_birthday_student`")->fetchAll(PDO::FETCH_COLUMN);
+		foreach ($columns as $column => $definition) {
+			if (!in_array($column, $existing, true)) {
+				$pdo->exec("ALTER TABLE `tbl_birthday_student` ADD COLUMN `" . $column . "` " . $definition);
+			}
+		}
+		$done = true;
+	} catch (Throwable $e) {
+		$done = false;
+	}
+
+	return $done;
+}
+
 function ensureBirthdayTables($pdo) {
 	static $ready = null;
 	if ($ready !== null) {
@@ -573,6 +644,7 @@ function ensureBirthdayTables($pdo) {
 	}
 
 	try {
+		ensureBirthdayStudentLayoutColumns($pdo);
 		$ready = true;
 		ensureBirthdayTemplateDefaults($pdo);
 	} catch (Throwable $e) {
@@ -670,6 +742,28 @@ function generateBirthdayCardImage($templateImagePath, $studentImagePath, $outpu
 	$width = imagesx($templateImage);
 	$height = imagesy($templateImage);
 
+	$normalizeShadow = function($value) {
+		$value = isset($value) ? (string) $value : '0';
+		return in_array($value, array('0', '1'), true) ? $value : '0';
+	};
+
+	$normalizeTextColor = function($value, $fallback) {
+		$value = trim((string) ($value ?? $fallback));
+		return preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $value) ? $value : $fallback;
+	};
+
+	$normalizeFontFamily = function($value, $fallback) {
+		$value = trim((string) ($value ?? $fallback));
+		$allowed = array('Poppins', 'Preeti', 'Ganesh', 'OO1', 'ArapGraphic', 'Aakriti');
+		return in_array($value, $allowed, true) ? $value : $fallback;
+	};
+
+	$normalizeTextStyle = function($value, $fallback) {
+		$value = trim((string) ($value ?? $fallback));
+		$allowed = array('normal', 'bold', 'italic', 'bold-italic');
+		return in_array($value, $allowed, true) ? $value : $fallback;
+	};
+
 	$opts = array(
 		'output_x' => isset($options['output_x']) ? (int) $options['output_x'] : 130,
 		'output_y' => isset($options['output_y']) ? (int) $options['output_y'] : 220,
@@ -680,13 +774,31 @@ function generateBirthdayCardImage($templateImagePath, $studentImagePath, $outpu
 		'class_x' => isset($options['class_x']) ? (int) $options['class_x'] : 20,
 		'class_y' => isset($options['class_y']) ? (int) $options['class_y'] : max(20, $height - 40),
 		'text_size' => isset($options['text_size']) ? max(8, (int) $options['text_size']) : 36,
-		'text_color' => isset($options['text_color']) ? (string) $options['text_color'] : '#0c2b5f',
-		'text_style' => isset($options['text_style']) ? (string) $options['text_style'] : 'bold',
-		'text_shadow' => isset($options['text_shadow']) && $options['text_shadow'] === '1',
-		'text_stroke_color' => isset($options['text_stroke_color']) ? (string) $options['text_stroke_color'] : '#ffffff',
+		'text_color' => $normalizeTextColor($options['text_color'] ?? null, '#0c2b5f'),
+		'text_style' => $normalizeTextStyle($options['text_style'] ?? null, 'bold'),
+		'text_shadow' => $normalizeShadow($options['text_shadow'] ?? '0'),
+		'text_stroke_color' => $normalizeTextColor($options['text_stroke_color'] ?? null, '#ffffff'),
 		'text_stroke_width' => isset($options['text_stroke_width']) ? max(0, (int)$options['text_stroke_width']) : 0,
 		'text_stroke_position' => isset($options['text_stroke_position']) ? (string)$options['text_stroke_position'] : 'outside',
 		'letter_spacing' => isset($options['letter_spacing']) ? (int) $options['letter_spacing'] : 0,
+		'name_text_size' => isset($options['name_text_size']) ? max(8, (int)$options['name_text_size']) : (isset($options['text_size']) ? max(8, (int)$options['text_size']) : 36),
+		'name_text_style' => $normalizeTextStyle($options['name_text_style'] ?? ($options['text_style'] ?? null), 'bold'),
+		'name_text_color' => $normalizeTextColor($options['name_text_color'] ?? ($options['text_color'] ?? null), '#0c2b5f'),
+		'name_text_shadow' => $normalizeShadow($options['name_text_shadow'] ?? ($options['text_shadow'] ?? '0')),
+		'name_text_stroke_color' => $normalizeTextColor($options['name_text_stroke_color'] ?? ($options['text_stroke_color'] ?? null), '#ffffff'),
+		'name_text_stroke_width' => isset($options['name_text_stroke_width']) ? max(0, (int)$options['name_text_stroke_width']) : (isset($options['text_stroke_width']) ? max(0, (int)$options['text_stroke_width']) : 0),
+		'name_text_stroke_position' => isset($options['name_text_stroke_position']) ? (string)$options['name_text_stroke_position'] : (isset($options['text_stroke_position']) ? (string)$options['text_stroke_position'] : 'outside'),
+		'name_font_family' => $normalizeFontFamily($options['name_font_family'] ?? ($options['font_family'] ?? null), 'Poppins'),
+		'name_letter_spacing' => isset($options['name_letter_spacing']) ? max(-20, min(50, (int)$options['name_letter_spacing'])) : (isset($options['letter_spacing']) ? max(-20, min(50, (int)$options['letter_spacing'])) : 0),
+		'class_text_size' => isset($options['class_text_size']) ? max(8, (int)$options['class_text_size']) : max(14, (int)round((isset($options['text_size']) ? max(8, (int)$options['text_size']) : 36) * 0.65)),
+		'class_text_style' => $normalizeTextStyle($options['class_text_style'] ?? ($options['text_style'] ?? null), 'bold'),
+		'class_text_color' => $normalizeTextColor($options['class_text_color'] ?? ($options['text_color'] ?? null), '#0c2b5f'),
+		'class_text_shadow' => $normalizeShadow($options['class_text_shadow'] ?? ($options['text_shadow'] ?? '0')),
+		'class_text_stroke_color' => $normalizeTextColor($options['class_text_stroke_color'] ?? ($options['text_stroke_color'] ?? null), '#ffffff'),
+		'class_text_stroke_width' => isset($options['class_text_stroke_width']) ? max(0, (int)$options['class_text_stroke_width']) : (isset($options['text_stroke_width']) ? max(0, (int)$options['text_stroke_width']) : 0),
+		'class_text_stroke_position' => isset($options['class_text_stroke_position']) ? (string)$options['class_text_stroke_position'] : (isset($options['text_stroke_position']) ? (string)$options['text_stroke_position'] : 'outside'),
+		'class_font_family' => $normalizeFontFamily($options['class_font_family'] ?? ($options['font_family'] ?? null), 'Poppins'),
+		'class_letter_spacing' => isset($options['class_letter_spacing']) ? max(-20, min(50, (int)$options['class_letter_spacing'])) : (isset($options['letter_spacing']) ? max(-20, min(50, (int)$options['letter_spacing'])) : 0),
 		'image_layer' => isset($options['image_layer']) && $options['image_layer'] === 'back' ? 'back' : 'front',
 	);
 	$canvas = imagecreatetruecolor($width, $height);
@@ -876,8 +988,10 @@ function generateBirthdayCardImage($templateImagePath, $studentImagePath, $outpu
 
 		if ($useTtf && $font) {
 			$bbox = imagettfbbox($size, 0, $font, $line['text']);
-			$minY = min($bbox[1], $bbox[3], $bbox[5], $bbox[7]);
-			$baselineY = $line['y'] - $minY;
+			$topMost = min($bbox[1], $bbox[3], $bbox[5], $bbox[7]);
+			// Match the browser preview: the Y value represents the top of the text box,
+			// not the font baseline. This prevents the class label from floating upward.
+			$baselineY = $line['y'] + max(0, abs($topMost));
 		}
 
 		if ($useTtf && $font) {

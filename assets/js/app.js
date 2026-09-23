@@ -44,10 +44,14 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     if (window.Swiper) {
+        const slideCount = function (selector) {
+            return document.querySelectorAll(selector + ' .swiper-slide').length;
+        };
+
         if (document.querySelector('.heroSwiper')) {
             new Swiper('.heroSwiper', {
                 slidesPerView: 1,
-                loop: true,
+                loop: slideCount('.heroSwiper') > 1,
                 autoplay: { delay: 5500, disableOnInteraction: false },
                 pagination: { el: '.heroSwiper .swiper-pagination', clickable: true },
                 navigation: {
@@ -63,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
             new Swiper('.homeGallerySwiper', {
                 slidesPerView: 1.12,
                 spaceBetween: 14,
-                loop: true,
+                loop: slideCount('.homeGallerySwiper') > 3,
                 speed: 650,
                 autoplay: { delay: 4800, disableOnInteraction: false },
                 pagination: { el: '.home-gallery-dots', clickable: true },
@@ -82,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function () {
             new Swiper('.brochureSwiper', {
                 slidesPerView: 1.12,
                 spaceBetween: 14,
-                loop: true,
+                loop: slideCount('.brochureSwiper') > 3,
                 speed: 650,
                 autoplay: { delay: 4800, disableOnInteraction: false },
                 pagination: { el: '.brochure-dots', clickable: true },
@@ -101,7 +105,7 @@ document.addEventListener('DOMContentLoaded', function () {
             new Swiper('.homeTeamSwiper', {
                 slidesPerView: 1.12,
                 spaceBetween: 14,
-                loop: true,
+                loop: slideCount('.homeTeamSwiper') > 3,
                 speed: 650,
                 autoplay: { delay: 4500, disableOnInteraction: false },
                 pagination: { el: '.home-team-dots', clickable: true },
@@ -120,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
             new Swiper('.homeServicesSwiper', {
                 slidesPerView: 1.12,
                 spaceBetween: 14,
-                loop: true,
+                loop: slideCount('.homeServicesSwiper') > 3,
                 speed: 650,
                 autoplay: { delay: 4600, disableOnInteraction: false },
                 pagination: { el: '.home-services-dots', clickable: true },

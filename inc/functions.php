@@ -1138,6 +1138,69 @@ function getWhatsAppLink() {
     return $link;
 }
 
+function sendWhatsAppCloudMessage($recipient, $message) {
+    $recipient = normalizeWhatsAppNumber($recipient);
+    $message = trim((string) $message);
+    $phoneNumberId = trim((string) getenv('WHATSAPP_PHONE_NUMBER_ID'));
+    $accessToken = trim((string) getenv('WHATSAPP_ACCESS_TOKEN'));
+    $apiVersion = trim((string) (getenv('WHATSAPP_GRAPH_API_VERSION') ?: 'v21.0'));
+
+    if ($recipient === '' || preg_match('#^https?://#i', $recipient)) {
+        return ['ok' => false, 'error' => 'Enter a valid WhatsApp number with country code.'];
+    }
+    if ($message === '') {
+        return ['ok' => false, 'error' => 'Message cannot be empty.'];
+    }
+    if ($phoneNumberId === '' || $accessToken === '') {
+        return ['ok' => false, 'error' => 'WhatsApp Cloud API is not configured.'];
+    }
+
+    $url = 'https://graph.facebook.com/' . rawurlencode($apiVersion) . '/' . rawurlencode($phoneNumberId) . '/messages';
+    $payload = json_encode([
+        'messaging_product' => 'whatsapp',
+        'to' => $recipient,
+        'type' => 'text',
+        'text' => [
+            'preview_url' => false,
+            'body' => $message,
+        ],
+    ]);
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => $payload,
+        ]);
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+        if ($raw === false) {
+            return ['ok' => false, 'error' => $curlError ?: 'WhatsApp API request failed.'];
+        }
+    } else {
+        $raw = authHttpRequest($url, $payload, 'application/json', 'POST');
+        $status = $raw === null ? 0 : 200;
+    }
+
+    $response = json_decode((string) $raw, true);
+    if ($status < 200 || $status >= 300 || !empty($response['error'])) {
+        return [
+            'ok' => false,
+            'error' => (string) ($response['error']['message'] ?? 'WhatsApp API rejected the message.'),
+        ];
+    }
+
+    return ['ok' => true, 'error' => ''];
+}
+
 function getProductGallery($productId) {
     global $pdo;
     $stmt = $pdo->prepare('SELECT photo FROM tbl_product_photo WHERE p_id = ? ORDER BY pp_id ASC');

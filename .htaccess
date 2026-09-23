@@ -1,5 +1,12 @@
 Options -Indexes
 
+# Global PHP upload limits for the whole school system.
+# .user.ini provides the equivalent settings for CGI/FastCGI.
+<IfModule mod_php.c>
+    php_value upload_max_filesize 20M
+    php_value post_max_size 25M
+</IfModule>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 

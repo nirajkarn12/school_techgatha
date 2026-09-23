@@ -29,7 +29,7 @@ if (isset($_POST['form1'])) {
 				continue;
 			}
 			$ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-			if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+			if (!adminIsAllowedImageExt($ext, false)) {
 				$valid = 0;
 				$error_message .= htmlspecialchars($name) . ' must be jpg, jpeg, png, gif or webp<br>';
 				continue;
@@ -64,8 +64,8 @@ if (isset($_POST['form1'])) {
 			$fileIndex = 0;
 			foreach ($uploadNames as $file) {
 				$fileIndex++;
-				$finalName = 'gallery-album-' . $albumId . '-' . time() . '-' . $fileIndex . '.' . $file['ext'];
-				if (!move_uploaded_file($file['tmp'], '../assets/uploads/' . $finalName)) {
+				$finalName = adminUniqueUploadName('gallery-album-' . $albumId, $file['ext']);
+				if (!adminMoveUploadedFile($file['tmp'], $finalName)) {
 					throw new RuntimeException('Could not save ' . $file['name']);
 				}
 				if ($cover === '') {
@@ -121,7 +121,7 @@ if (isset($_POST['form1'])) {
 						<div class="form-group">
 							<label class="col-sm-2 control-label">Photos *</label>
 							<div class="col-sm-6">
-								<input type="file" name="photos[]" multiple accept=".jpg,.jpeg,.png,.gif,.webp">
+								<input type="file" name="photos[]" multiple accept="<?php echo htmlspecialchars(adminImageAcceptAttribute(false)); ?>">
 								<p class="help-block">Select multiple photos at once. First photo becomes the album cover.</p>
 							</div>
 						</div>

@@ -57,7 +57,7 @@ if (isset($_POST['form1'])) {
 					continue;
 				}
 				$ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-				if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+				if (!adminIsAllowedImageExt($ext, false)) {
 					continue;
 				}
 				$uploadNames[] = ['ext' => $ext, 'tmp' => $files['tmp_name'][$i]];
@@ -73,8 +73,8 @@ if (isset($_POST['form1'])) {
 			$fileIndex = 0;
 			foreach ($uploadNames as $file) {
 				$fileIndex++;
-				$finalName = 'gallery-album-' . $id . '-' . time() . '-' . $fileIndex . '.' . $file['ext'];
-				if (!move_uploaded_file($file['tmp'], '../assets/uploads/' . $finalName)) {
+				$finalName = adminUniqueUploadName('gallery-album-' . $id, $file['ext']);
+				if (!adminMoveUploadedFile($file['tmp'], $finalName)) {
 					continue;
 				}
 				if ($cover_photo === '') {
@@ -134,7 +134,7 @@ $photos = $photos->fetchAll(PDO::FETCH_ASSOC);
 						<div class="form-group">
 							<label class="col-sm-2 control-label">Add More Photos</label>
 							<div class="col-sm-6">
-								<input type="file" name="photos[]" multiple accept=".jpg,.jpeg,.png,.gif,.webp">
+								<input type="file" name="photos[]" multiple accept="<?php echo htmlspecialchars(adminImageAcceptAttribute(false)); ?>">
 								<p class="help-block">Upload multiple photos at once into this album.</p>
 							</div>
 						</div>

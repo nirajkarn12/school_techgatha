@@ -46,8 +46,8 @@ $output_height = (int)($row['output_height'] ?? (int)$row['output_height']);
 
 $name_x = (int)($row['name_x'] ?? 395);
 $name_y = (int)($row['name_y'] ?? 935);
-$class_x = (int)($row['class_x'] ?? 334);
-$class_y = (int)($row['class_y'] ?? 1026);
+$class_x = (int)($row['class_x'] ?? 360);
+$class_y = (int)($row['class_y'] ?? 1021);
 
 if ($name_x <= 0) {
     $name_x = 395;
@@ -56,10 +56,10 @@ if ($name_y <= 0) {
     $name_y = 935;
 }
 if ($class_x <= 0) {
-    $class_x = 334;
+    $class_x = 360;
 }
 if ($class_y <= 0) {
-    $class_y = 1026;
+    $class_y = 1021;
 }
 
 $text_size = (int)($row['text_size'] ?? 50);
@@ -168,10 +168,10 @@ if (
             $name_y = 935;
         }
         if ($class_x <= 0) {
-            $class_x = 334;
+            $class_x = 360;
         }
         if ($class_y <= 0) {
-            $class_y = 1026;
+            $class_y = 1021;
         }
         $text_size = (int)($row['text_size'] ?? $text_size);
         $text_color = $row['text_color'] ?? $text_color;
@@ -281,10 +281,10 @@ if (
         $name_y = 935;
     }
     if ($class_x <= 0) {
-        $class_x = 334;
+        $class_x = 360;
     }
     if ($class_y <= 0) {
-        $class_y = 1026;
+        $class_y = 1021;
     }
 
 

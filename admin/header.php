@@ -161,11 +161,34 @@ if(!isset($_SESSION['user'])) {
                             <li><a href="leadership.php"><i class="fa fa-circle-o"></i> Leadership Messages</a></li>
                             <li><a href="calendar-event.php"><i class="fa fa-circle-o"></i> School Calendar</a></li>
                             <li><a href="admission-list.php"><i class="fa fa-circle-o"></i> Admissions</a></li>
-                            <li><a href="birthday-template.php"><i class="fa fa-circle-o"></i> Birthday Templates</a></li>
-                            <li><a href="birthday.php"><i class="fa fa-circle-o"></i> Birthday Students</a></li>
-                            <li><a href="election.php"><i class="fa fa-circle-o"></i> Student Election</a></li>
-                            <li><a href="lottery.php"><i class="fa fa-circle-o"></i> Lottery Tickets</a></li>
-                            <li><a href="quiz.php"><i class="fa fa-circle-o"></i> quiz</a></li>
+                        </ul>
+                    </li>
+                    <li class="treeview <?php if(in_array($cur_page, ['election.php', 'lottery.php', 'quiz.php'], true)) {echo 'active';} ?>"> 
+    <a href="#"> 
+        <i class="fa fa-star"></i> 
+        <span>ECA/CCA Activities</span> 
+        <span class="pull-right-container"> 
+            <i class="fa fa-angle-left pull-right"></i> 
+        </span> 
+    </a> 
+    <ul class="treeview-menu"> 
+        <li><a href="election.php"><i class="fa fa-circle-o"></i> Student Election</a></li> 
+        <li><a href="lottery.php"><i class="fa fa-circle-o"></i> Lottery Tickets</a></li> 
+        <li><a href="quiz.php"><i class="fa fa-circle-o"></i> Quiz</a></li> 
+    </ul> 
+</li>
+                    <li class="treeview <?php if(in_array($cur_page, ['leadership.php', 'leadership-edit.php', 'calendar-event.php', 'calendar-event-add.php', 'calendar-event-edit.php', 'admission-list.php', 'admission-view.php'], true)) {echo 'active';} ?>">
+                        <a href="#">
+                            <i class="fa fa-gift"></i>
+                            <span>Birthday</span>
+                            <span class="pull-right-container">
+                                <i class="fa fa-angle-left pull-right"></i>
+                            </span>
+                        </a>
+                        <ul class="treeview-menu">
+
+                            <li><a href="birthday-template.php"><i class="fa fa-id-card"></i> Birthday Templates</a></li>
+                            <li><a href="birthday.php"><i class="fa fa-gift"></i> Birthday Students</a></li>
                         </ul>
                     </li>
 

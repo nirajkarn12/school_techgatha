@@ -44,10 +44,23 @@ $output_y = (int)($row['output_y'] ?? 320);
 $output_width = (int)($row['output_width'] ?? (int)$row['output_width']);
 $output_height = (int)($row['output_height'] ?? (int)$row['output_height']);
 
-$name_x = (int)($row['name_x'] ?? 390);
-$name_y = (int)($row['name_y'] ?? 924);
-$class_x = (int)($row['class_x'] ?? 348);
-$class_y = (int)($row['class_y'] ?? 1017);
+$name_x = (int)($row['name_x'] ?? 395);
+$name_y = (int)($row['name_y'] ?? 935);
+$class_x = (int)($row['class_x'] ?? 334);
+$class_y = (int)($row['class_y'] ?? 1026);
+
+if ($name_x <= 0) {
+    $name_x = 395;
+}
+if ($name_y <= 0) {
+    $name_y = 935;
+}
+if ($class_x <= 0) {
+    $class_x = 334;
+}
+if ($class_y <= 0) {
+    $class_y = 1026;
+}
 
 $text_size = (int)($row['text_size'] ?? 50);
 $text_color = $row['text_color'] ?? '#0c2b5f';
@@ -148,6 +161,18 @@ if (
         $name_y = (int)($row['name_y'] ?? $name_y);
         $class_x = (int)($row['class_x'] ?? $class_x);
         $class_y = (int)($row['class_y'] ?? $class_y);
+        if ($name_x <= 0) {
+            $name_x = 395;
+        }
+        if ($name_y <= 0) {
+            $name_y = 935;
+        }
+        if ($class_x <= 0) {
+            $class_x = 334;
+        }
+        if ($class_y <= 0) {
+            $class_y = 1026;
+        }
         $text_size = (int)($row['text_size'] ?? $text_size);
         $text_color = $row['text_color'] ?? $text_color;
         $text_style = $row['text_style'] ?? $text_style;
@@ -248,6 +273,19 @@ if (
         0,
         (int)($_POST['class_y'] ?? $class_y)
     );
+
+    if ($name_x <= 0) {
+        $name_x = 395;
+    }
+    if ($name_y <= 0) {
+        $name_y = 935;
+    }
+    if ($class_x <= 0) {
+        $class_x = 334;
+    }
+    if ($class_y <= 0) {
+        $class_y = 1026;
+    }
 
 
     /*
@@ -2155,30 +2193,6 @@ if (
                                 </div>
 
 
-                                <!-- DOWNLOAD -->
-
-                                <div class="panel-item panel-full-width panel-actions">
-
-                                    <button
-                                        type="submit"
-                                        name="save_layout"
-                                        value="1"
-                                        class="btn btn-warning btn-sm"
-                                    >
-                                        <i class="fa fa-save"></i>
-                                        Save Layout
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        id="download-preview"
-                                        class="btn btn-primary btn-sm"
-                                    >
-                                        <i class="fa fa-check"></i>
-                                        Download Preview
-                                    </button>
-
-                                </div>
 
                             </div>
 
@@ -2321,43 +2335,22 @@ if (
 
                     </div>
 
+            
+                                <!-- DOWNLOAD -->
 
-                    <?php if ($success_message): ?>
-
-                        <div class="box box-success">
-
-                            <div class="box-body">
-
-                                <p>
-                                    <?php echo htmlspecialchars($success_message); ?>
-                                </p>
+                                <div class="panel-item panel-full-width panel-actions">
 
 
-                                <a
-                                    href="birthday-download.php?id=<?php echo (int)$id; ?>"
-                                    class="btn btn-info"
-                                >
-                                    Download Generated Image
-                                </a>
+                                    <button
+                                        type="button"
+                                        id="download-preview"
+                                        class="btn btn-primary btn-sm"
+                                    >
+                                        <i class="fa fa-check"></i>
+                                        Download Birthday Card
+                                    </button>
 
-                            </div>
-
-                        </div>
-
-                    <?php endif; ?>
-
-
-                    <div style="margin-top:10px; text-align:right;">
-
-                        <button
-                            type="submit"
-                            class="btn btn-success"
-                        >
-                            Generate Image
-                        </button>
-
-                    </div>
-
+                                </div>
                 </div>
 
             </div>
@@ -5325,27 +5318,23 @@ if (
                         template.width ||
                         container.clientWidth;
 
-
                     var displayed =
                         template.clientWidth ||
                         container.clientWidth;
-
 
                     var ratio =
                         displayed > 0
                             ? natural / displayed
                             : 1;
 
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | HIDE EDITOR ELEMENTS
-                    |--------------------------------------------------------------------------
-                    */
-
                     var wrapperEl =
                         document.getElementById(
                             'student-wrapper'
+                        );
+
+                    var nameOverlay =
+                        document.getElementById(
+                            'name-overlay'
                         );
 
                     var classOverlay =
@@ -5353,16 +5342,19 @@ if (
                             'class-overlay'
                         );
 
-
                     var handles =
                         container.querySelectorAll(
                             '.resize-handle'
                         );
 
-
                     var origBorder =
                         wrapperEl
                             ? wrapperEl.style.border
+                            : '';
+
+                    var origNameTop =
+                        nameOverlay
+                            ? nameOverlay.style.top
                             : '';
 
                     var origClassTop =
@@ -5370,36 +5362,31 @@ if (
                             ? classOverlay.style.top
                             : '';
 
-
                     var origHandles = [];
-
 
                     handles.forEach(
                         function(handle) {
-
                             origHandles.push(
                                 handle.style.display
                             );
-
-                            handle.style.display =
-                                'none';
-
+                            handle.style.display = 'none';
                         }
                     );
 
-
                     if (wrapperEl) {
-
                         wrapperEl.style.border =
                             '2px solid transparent';
+                    }
 
+                    if (nameOverlay) {
+                        nameOverlay.style.top =
+                            (parseFloat(getComputedStyle(nameOverlay).top) + 6) + 'px';
                     }
 
                     if (classOverlay) {
                         classOverlay.style.top =
                             (parseFloat(getComputedStyle(classOverlay).top) + 6) + 'px';
                     }
-
 
                     /*
                     |--------------------------------------------------------------------------
@@ -5526,7 +5513,6 @@ if (
 
                             a.remove();
 
-
                             setTimeout(
                                 function() {
 
@@ -5575,10 +5561,13 @@ if (
                         function() {
 
                             if (wrapperEl) {
-
                                 wrapperEl.style.border =
                                     origBorder;
+                            }
 
+                            if (nameOverlay) {
+                                nameOverlay.style.top =
+                                    origNameTop;
                             }
 
                             if (classOverlay) {
@@ -5586,17 +5575,10 @@ if (
                                     origClassTop;
                             }
 
-
                             handles.forEach(
-                                function(
-                                    handle,
-                                    index
-                                ) {
-
+                                function(handle, index) {
                                     handle.style.display =
-                                        origHandles[index] ||
-                                        '';
-
+                                        origHandles[index] || '';
                                 }
                             );
 

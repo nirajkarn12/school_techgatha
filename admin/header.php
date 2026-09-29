@@ -165,8 +165,8 @@ if(!isset($_SESSION['user'])) {
                     </li>
                     <li class="treeview <?php if(in_array($cur_page, ['election.php', 'lottery.php', 'quiz.php'], true)) {echo 'active';} ?>"> 
     <a href="#"> 
-        <i class="fa fa-star"></i> 
-        <span>ECA/CCA Activities</span> 
+<i class="fa fa-trophy"></i>
+<span>ECA/CCA Activities</span>
         <span class="pull-right-container"> 
             <i class="fa fa-angle-left pull-right"></i> 
         </span> 

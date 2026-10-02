@@ -30,14 +30,6 @@ $breadcrumbs = [
 ];
 echo renderBreadcrumbs($breadcrumbs);
 
-$avgRating = 0;
-if ($reviews) {
-    $sum = 0;
-    foreach ($reviews as $r) {
-        $sum += (int)$r['rating'];
-    }
-    $avgRating = round($sum / count($reviews), 1);
-}
 ?>
 <div class="section-head mb-4">
   <div>
@@ -45,17 +37,6 @@ if ($reviews) {
     <h1 class="section-title"><?php echo t('reviews_title'); ?></h1>
     <p class="section-subtitle mb-0"><?php echo t('reviews_subtitle'); ?></p>
   </div>
-  <?php if ($reviews) { ?>
-  <div class="reviews-summary">
-    <div class="reviews-avg"><?php echo e((string)$avgRating); ?></div>
-    <div class="review-stars" aria-label="<?php echo e((string)$avgRating); ?> out of 5">
-      <?php for ($i = 1; $i <= 5; $i++) { ?>
-        <i class="fa fa-star<?php echo $i <= round($avgRating) ? '' : '-o'; ?>"></i>
-      <?php } ?>
-    </div>
-    <div class="text-muted small"><?php echo count($reviews); ?> <?php echo t('reviews'); ?></div>
-  </div>
-  <?php } ?>
 </div>
 
 <?php if (!$reviews) { ?>
@@ -65,15 +46,9 @@ if ($reviews) {
     <?php foreach ($reviews as $item) {
       $initial = strtoupper(mb_substr($item['name'], 0, 1));
       $role = trim($item['designation'] . ($item['company'] !== '' ? ' · ' . $item['company'] : ''));
-      $rating = max(1, min(5, (int)$item['rating']));
     ?>
       <div class="col-md-6 col-lg-4 reveal">
         <article class="review-card h-100">
-          <div class="review-stars mb-3">
-            <?php for ($i = 1; $i <= 5; $i++) { ?>
-              <i class="fa fa-star<?php echo $i <= $rating ? '' : '-o'; ?>"></i>
-            <?php } ?>
-          </div>
           <p class="review-text">“<?php echo e($item['review']); ?>”</p>
           <div class="review-author">
             <?php if (!empty($item['photo'])) { ?>

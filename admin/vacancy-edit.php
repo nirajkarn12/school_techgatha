@@ -77,7 +77,7 @@ if (isset($_POST['form1'])) {
 						</div>
 						<div class="form-group">
 							<label class="col-sm-2 control-label">Description</label>
-							<div class="col-sm-9"><textarea class="form-control" name="description" rows="6"><?php echo htmlspecialchars((string) $description); ?></textarea></div>
+							<div class="col-sm-9"><textarea class="form-control" name="description" id="editor1" rows="6"><?php echo htmlspecialchars((string) $description, ENT_QUOTES, 'UTF-8'); ?></textarea></div>
 						</div>
 						<div class="form-group">
 							<label class="col-sm-2 control-label">Status</label>

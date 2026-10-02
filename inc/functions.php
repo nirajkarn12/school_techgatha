@@ -1874,6 +1874,70 @@ function getActiveVacancies() {
     }
 }
 
+function storeCareerApplicationUpload($upload, $prefix, $allowedExtensions, $maxBytes, $required, &$error) {
+    $name = (string) ($upload['name'] ?? '');
+    $tmp = (string) ($upload['tmp_name'] ?? '');
+    $uploadError = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+
+    if ($uploadError === UPLOAD_ERR_NO_FILE && !$required) {
+        return '';
+    }
+    if ($uploadError !== UPLOAD_ERR_OK || $name === '' || $tmp === '' || !is_uploaded_file($tmp)) {
+        $error = $required ? 'Please attach your CV or resume.' : 'The photo upload failed.';
+        return false;
+    }
+
+    if (filesize($tmp) > $maxBytes) {
+        $error = $prefix === 'cv' ? 'The CV or resume must be 5 MB or smaller.' : 'The photo must be 3 MB or smaller.';
+        return false;
+    }
+
+    $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if (!in_array($extension, $allowedExtensions, true)) {
+        $error = $prefix === 'cv' ? 'CV files must be PDF, DOC or DOCX.' : 'Photo files must be JPG, PNG, GIF or WEBP.';
+        return false;
+    }
+
+    if ($prefix === 'image' && @getimagesize($tmp) === false) {
+        $error = 'The photo is not a valid image.';
+        return false;
+    }
+
+    $directory = dirname(__DIR__) . '/assets/uploads/career-applications';
+    if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
+        $error = 'The upload directory could not be created.';
+        return false;
+    }
+
+    try {
+        $storedName = $prefix . '-' . bin2hex(random_bytes(16)) . '.' . $extension;
+    } catch (Throwable $e) {
+        $error = 'Could not prepare the uploaded file.';
+        return false;
+    }
+
+    if (!move_uploaded_file($tmp, $directory . DIRECTORY_SEPARATOR . $storedName)) {
+        $error = 'Could not save the uploaded file.';
+        return false;
+    }
+
+    return $storedName;
+}
+
+function ensureCareerApplicationUploadColumns($pdo) {
+    $existingColumns = $pdo->query('SHOW COLUMNS FROM `tbl_career_application`')->fetchAll(PDO::FETCH_COLUMN);
+    $uploadColumns = array(
+        'cv_file' => "varchar(255) NOT NULL DEFAULT ''",
+        'image_file' => "varchar(255) NOT NULL DEFAULT ''"
+    );
+
+    foreach ($uploadColumns as $column => $definition) {
+        if (!in_array($column, $existingColumns, true)) {
+            $pdo->exec('ALTER TABLE `tbl_career_application` ADD COLUMN `' . $column . '` ' . $definition);
+        }
+    }
+}
+
 function handleCareerFormSubmission($redirectUrl) {
     global $pdo;
 
@@ -1896,6 +1960,7 @@ function handleCareerFormSubmission($redirectUrl) {
         exit;
     }
 
+    $savedFiles = [];
     try {
         $check = $pdo->prepare("SELECT id FROM tbl_vacancy WHERE id = ? AND status = 'Active' LIMIT 1");
         $check->execute([$vacancyId]);
@@ -1905,14 +1970,55 @@ function handleCareerFormSubmission($redirectUrl) {
             exit;
         }
 
+        ensureCareerApplicationUploadColumns($pdo);
+
+        $uploadError = '';
+        $cvFile = storeCareerApplicationUpload(
+            $_FILES['cv_file'] ?? [],
+            'cv',
+            ['pdf', 'doc', 'docx'],
+            5 * 1024 * 1024,
+            true,
+            $uploadError
+        );
+        if ($cvFile === false) {
+            setFlash('danger', $uploadError);
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        $savedFiles[] = $cvFile;
+
+        $imageFile = storeCareerApplicationUpload(
+            $_FILES['applicant_image'] ?? [],
+            'image',
+            ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+            3 * 1024 * 1024,
+            false,
+            $uploadError
+        );
+        if ($imageFile === false) {
+            foreach ($savedFiles as $savedFile) {
+                @unlink(dirname(__DIR__) . '/assets/uploads/career-applications/' . $savedFile);
+            }
+            setFlash('danger', $uploadError);
+            header('Location: ' . $redirectUrl);
+            exit;
+        }
+        if ($imageFile !== '') {
+            $savedFiles[] = $imageFile;
+        }
+
         $stmt = $pdo->prepare("
             INSERT INTO tbl_career_application
-            (vacancy_id, full_name, phone, email, resume_note, cover_letter, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'New', NOW())
+            (vacancy_id, full_name, phone, email, resume_note, cover_letter, cv_file, image_file, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'New', NOW())
         ");
-        $stmt->execute([$vacancyId, $fullName, $phone, $email, $resumeNote, $coverLetter]);
+        $stmt->execute([$vacancyId, $fullName, $phone, $email, $resumeNote, $coverLetter, $cvFile, $imageFile]);
         setFlash('success', loadLang('career_form_success'));
     } catch (Throwable $e) {
+        foreach ($savedFiles as $savedFile) {
+            @unlink(dirname(__DIR__) . '/assets/uploads/career-applications/' . $savedFile);
+        }
         setFlash('danger', loadLang('career_form_error'));
     }
 

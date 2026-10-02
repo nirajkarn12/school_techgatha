@@ -90,7 +90,6 @@ if (empty($hideWhatsAppFloatingLink) && $whatsAppLink !== '') {
         </div>
     </div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.js"></script>
@@ -110,7 +109,7 @@ $(function() {
 });
 </script>
 <script>window.BASE_URL = <?php echo json_encode(BASE_URL); ?>;</script>
-<script src="<?php echo ASSET_URL; ?>js/app.js?v=20260724c"></script>
+<script src="<?php echo ASSET_URL; ?>js/app.js?v=20260930a"></script>
 <?php
 $scriptName = basename($_SERVER['SCRIPT_NAME'] ?? '');
 if ($scriptName === 'gallery.php' || $scriptName === 'gallery-album.php') {

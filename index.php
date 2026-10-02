@@ -29,9 +29,17 @@ $fullWidth = true;
 $showWaterSplash = false;
 include __DIR__ . '/inc/header.php';
 
-$posts = $pdo->query('SELECT post_id, post_title, post_content, photo FROM tbl_post ORDER BY post_id DESC LIMIT 3')->fetchAll();
+$posts = $pdo->query('SELECT post_id, post_title, post_content, post_date, photo FROM tbl_post ORDER BY post_id DESC LIMIT 5')->fetchAll();
 $faqs = $pdo->query('SELECT faq_id, faq_title, faq_content FROM tbl_faq ORDER BY faq_id ASC LIMIT 5')->fetchAll();
 $settings = $pdo->query('SELECT * FROM tbl_settings LIMIT 1')->fetch();
+$homeTestimonials = [];
+if ((int)($settings['home_testimonial_on_off'] ?? 1) === 1) {
+  try {
+    $homeTestimonials = $pdo->query("SELECT * FROM tbl_testimonial WHERE status = 'Active' ORDER BY sort_order ASC, id DESC LIMIT 9")->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Throwable $e) {
+    $homeTestimonials = [];
+  }
+}
 $heroSlides = $pdo->query('SELECT * FROM tbl_slider ORDER BY id ASC')->fetchAll();
 $brandName = e(getSiteSetting('site_name', SITE_NAME));
 $heroFallback = ASSET_URL . 'images/cleaning-hero.jpg';
@@ -85,6 +93,7 @@ $calendarEventsJson = array_map(static function ($event) {
         'id' => (int) ($event['id'] ?? 0),
         'title' => (string) ($event['title'] ?? ''),
         'description' => (string) ($event['description'] ?? ''),
+        'event_color' => (string) ($event['event_color'] ?? '#e5262f'),
         'event_date' => (string) ($event['event_date'] ?? ''),
         'end_date' => (string) ($event['end_date'] ?? ''),
         'event_time' => (string) ($event['event_time'] ?? ''),
@@ -132,10 +141,9 @@ $facebookPageUrl = getFacebookPageUrl();
     <div class="swiper-button-next hero-nav" aria-label="<?php echo t('next'); ?>"></div>
   </div>
 </section>
-<?php include __DIR__ . '/inc/partials/marquee-ribbon.php'; ?>
 </div>
 
-<section class="trust-strip">
+<!-- <section class="trust-strip">
   <div class="container">
     <div class="trust-grid">
       <div class="trust-item"><i class="fa fa-graduation-cap"></i><span><?php echo t('trust_vetted'); ?></span></div>
@@ -144,7 +152,7 @@ $facebookPageUrl = getFacebookPageUrl();
       <div class="trust-item"><i class="fa fa-phone"></i><a href="tel:<?php echo preg_replace('/\s+/', '', $phone); ?>"><?php echo $phone; ?></a></div>
     </div>
   </div>
-</section>
+</section> -->
 
 <div class="container page-wrap pt-5">
 
@@ -291,11 +299,17 @@ include __DIR__ . '/inc/partials/achievers-section.php';
         </div>
         <a href="<?php echo BASE_URL; ?>calendar.php" class="btn btn-outline-dark btn-sm"><?php echo t('view_all_events'); ?></a>
       </div>
-      <div
-        id="homeNepaliCalendar"
-        class="school-nepali-calendar"
-        data-lang="<?php echo e(getCurrentLang()); ?>"
-      ></div>
+      <div class="home-calendar-widget">
+        <div
+          id="homeNepaliCalendar"
+          class="school-nepali-calendar"
+          data-lang="<?php echo e(getCurrentLang()); ?>"
+        ></div>
+        <aside class="school-cal-month-events home-calendar-events" id="homeCalendarMonthEvents">
+          <h3 class="school-cal-month-events-title" data-cal-month-events-title></h3>
+          <div class="school-cal-month-event-list" data-cal-month-events></div>
+        </aside>
+      </div>
     </div>
     <div class="home-split-panel">
       <div class="section-head section-head--tight">
@@ -328,7 +342,34 @@ include __DIR__ . '/inc/partials/achievers-section.php';
             }
           })();
           </script>
-          <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0"></script>
+          <script>
+          (function () {
+            var shell = document.getElementById('facebookPageShell');
+            if (!shell) return;
+            var loaded = false;
+            var loadFacebookSdk = function () {
+              if (loaded) return;
+              loaded = true;
+              var sdk = document.createElement('script');
+              sdk.async = true;
+              sdk.defer = true;
+              sdk.crossOrigin = 'anonymous';
+              sdk.src = 'https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0';
+              document.head.appendChild(sdk);
+            };
+            if ('IntersectionObserver' in window) {
+              var observer = new IntersectionObserver(function (entries) {
+                if (entries.some(function (entry) { return entry.isIntersecting; })) {
+                  observer.disconnect();
+                  loadFacebookSdk();
+                }
+              }, { rootMargin: '400px' });
+              observer.observe(shell);
+            } else {
+              window.addEventListener('load', loadFacebookSdk, { once: true });
+            }
+          })();
+          </script>
         <?php } else { ?>
           <div class="alert alert-light border rounded-4 mb-0"><?php echo t('facebook_not_configured'); ?></div>
         <?php } ?>
@@ -338,7 +379,7 @@ include __DIR__ . '/inc/partials/achievers-section.php';
 </section>
 
 <script src="https://unpkg.com/nepali-date-picker-converter@0.1.32/dist/bundle.umd.js"></script>
-<script src="<?php echo ASSET_URL; ?>js/school-nepali-calendar.js?v=20260723b"></script>
+<script src="<?php echo ASSET_URL; ?>js/school-nepali-calendar.js?v=20260930f"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   var root = document.getElementById('homeNepaliCalendar');
@@ -350,11 +391,15 @@ document.addEventListener('DOMContentLoaded', function () {
   new SchoolNepaliCalendar(root, {
     events: <?php echo json_encode($calendarEventsJson, JSON_UNESCAPED_UNICODE); ?>,
     lang: root.getAttribute('data-lang') || 'en',
+    showDayDetails: false,
+    eventsPanel: document.getElementById('homeCalendarMonthEvents'),
     labels: {
       bs_label: <?php echo json_encode(loadLang('calendar_bs_label')); ?>,
       school_event: <?php echo json_encode(loadLang('calendar_school_event')); ?>,
       today: <?php echo json_encode(loadLang('calendar_today')); ?>,
-      no_events_day: <?php echo json_encode(loadLang('calendar_no_events_day')); ?>
+      no_events_day: <?php echo json_encode(loadLang('calendar_no_events_day')); ?>,
+      month_events_title: <?php echo json_encode(loadLang('calendar_month_events_title')); ?>,
+      no_month_events: <?php echo json_encode(loadLang('no_calendar_events')); ?>
     }
   });
 });
@@ -384,20 +429,32 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
     <a href="<?php echo BASE_URL; ?>blog.php" class="btn btn-outline-dark"><?php echo t('read_more'); ?></a>
   </div>
-  <div class="row g-4">
-    <?php foreach ($posts as $post) { ?>
-      <div class="col-md-6 col-lg-4">
-        <article class="card-hover blog-card home-tip-card h-100">
-          <div class="home-tip-media">
-            <img src="<?php echo getProductImage($post['photo']); ?>" alt="<?php echo e($post['post_title']); ?>" loading="lazy">
-          </div>
-          <div class="home-tip-body">
-            <h5><?php echo e($post['post_title']); ?></h5>
-            <p class="text-muted"><?php echo excerpt(strip_tags($post['post_content']), 120); ?></p>
-            <a class="btn btn-dark" href="blog.php?id=<?php echo (int)$post['post_id']; ?>"><?php echo t('read_more'); ?></a>
-          </div>
-        </article>
-      </div>
+  <div class="home-news-layout">
+    <?php $featuredPost = $posts[0]; ?>
+    <article class="home-news-feature">
+      <a class="home-news-feature-link" href="<?php echo BASE_URL; ?>blog.php?id=<?php echo (int)$featuredPost['post_id']; ?>">
+        <img src="<?php echo e(getProductImage($featuredPost['photo'] ?? '')); ?>" alt="<?php echo e($featuredPost['post_title']); ?>" loading="lazy">
+        <span class="home-news-feature-shade"></span>
+        <span class="home-news-feature-copy">
+          <span class="home-news-category"><?php echo t('blog'); ?></span>
+          <span class="home-news-feature-title"><?php echo e($featuredPost['post_title']); ?></span>
+        </span>
+      </a>
+    </article>
+    <?php if (count($posts) > 1) { ?>
+    <aside class="home-news-list" aria-label="<?php echo e(t('from_the_blog')); ?>">
+      <?php foreach (array_slice($posts, 1) as $post) { ?>
+      <a class="home-news-item" href="<?php echo BASE_URL; ?>blog.php?id=<?php echo (int)$post['post_id']; ?>">
+        <img src="<?php echo e(getProductImage($post['photo'] ?? '')); ?>" alt="" loading="lazy">
+        <span class="home-news-item-copy">
+          <strong><?php echo e($post['post_title']); ?></strong>
+          <?php if (trim((string)($post['post_date'] ?? '')) !== '') { ?>
+          <time class="home-news-date"><i class="fa fa-calendar" aria-hidden="true"></i> <?php echo e($post['post_date']); ?></time>
+          <?php } ?>
+        </span>
+      </a>
+      <?php } ?>
+    </aside>
     <?php } ?>
   </div>
 </section>
@@ -415,7 +472,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <?php include __DIR__ . '/inc/partials/brochure-section.php'; ?>
 
-<section class="section-block">
+<section id="faq" class="section-block">
   <div class="section-head">
     <div>
       <div class="section-kicker"><?php echo t('faqs'); ?></div>
@@ -484,6 +541,48 @@ document.addEventListener('DOMContentLoaded', function () {
     <?php echo !empty($settings['contact_map_iframe']) ? $settings['contact_map_iframe'] : '<iframe loading="lazy" title="' . e(loadLang('visit_us')) . '" src="https://www.google.com/maps?q=Kathmandu,Nepal&output=embed"></iframe>'; ?>
   </div>
 </section>
+<?php if ($homeTestimonials) { ?>
+<section class="section-block home-testimonials-showcase reveal">
+  <div class="home-gallery-head">
+    <div>
+      <div class="section-kicker"><?php echo t('home_testimonials_kicker'); ?></div>
+      <h2 class="home-gallery-title"><?php echo t('home_testimonials_title'); ?></h2>
+    </div>
+  </div>
+  <div class="swiper homeTestimonialsSwiper">
+    <div class="swiper-wrapper">
+      <?php foreach ($homeTestimonials as $item) {
+        $name = trim((string)($item['name'] ?? ''));
+        $initial = $name !== '' ? strtoupper(mb_substr($name, 0, 1)) : '?';
+        $designation = trim((string)($item['designation'] ?? ''));
+        $company = trim((string)($item['company'] ?? ''));
+        $role = trim($designation . ($company !== '' ? ' · ' . $company : ''));
+      ?>
+        <div class="swiper-slide h-auto">
+          <article class="review-card home-testimonial-card h-100">
+            <div class="home-testimonial-avatar">
+              <?php if (!empty($item['photo'])) { ?>
+                <img src="<?php echo e(getProductImage($item['photo'])); ?>" alt="<?php echo e($name); ?>" loading="lazy">
+              <?php } else { ?>
+                <span class="review-avatar"><?php echo e($initial); ?></span>
+              <?php } ?>
+            </div>
+            <p class="review-text"><?php echo e($item['review']); ?></p>
+            <div class="home-testimonial-quote" aria-hidden="true"><i class="fa fa-quote-left"></i></div>
+            <div class="review-author">
+              <div>
+                <strong><?php echo e($name); ?></strong>
+                <?php if ($role !== '') { ?><div class="text-muted small"><?php echo e($role); ?></div><?php } ?>
+              </div>
+            </div>
+          </article>
+        </div>
+      <?php } ?>
+    </div>
+    <div class="swiper-pagination home-testimonials-dots"></div>
+  </div>
+</section>
+<?php } ?>
 </div>
 
 <?php

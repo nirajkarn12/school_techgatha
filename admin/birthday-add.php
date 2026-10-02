@@ -3,6 +3,18 @@
 <?php
 ensureBirthdayTables($pdo);
 
+function birthdayAddImageName($studentName, $className, $extension)
+{
+    $className = preg_replace('/^class[\s_-]*/i', '', trim($className));
+    $studentName = strtolower(trim($studentName));
+    $className = strtolower(trim($className));
+    $studentName = trim(preg_replace('/[^a-z0-9]+/i', '_', $studentName), '_');
+    $className = trim(preg_replace('/[^a-z0-9]+/i', '_', $className), '_');
+    $extension = strtolower($extension);
+
+    return $studentName . '_' . $className . '.' . $extension;
+}
+
 if (isset($_POST['form1'])) {
     $valid = 1;
     $name = trim($_POST['name'] ?? '');
@@ -12,6 +24,11 @@ if (isset($_POST['form1'])) {
     }
 
     $class_name = trim($_POST['class_name'] ?? '');
+    if ($class_name === '') {
+        $valid = 0;
+        $error_message .= 'Class is required<br>';
+    }
+
     $birthday_date = trim($_POST['birthday_date'] ?? '');
     $details = trim($_POST['details'] ?? '');
     $template_id = (int)($_POST['template_id'] ?? 0);
@@ -19,6 +36,8 @@ if (isset($_POST['form1'])) {
     $path = $_FILES['student_image']['name'] ?? '';
     $tmp = $_FILES['student_image']['tmp_name'] ?? '';
     $err = (int)($_FILES['student_image']['error'] ?? UPLOAD_ERR_NO_FILE);
+    $ext = '';
+    $final_name = '';
     if ($path === '' || $err !== UPLOAD_ERR_OK || !is_uploaded_file($tmp)) {
         $valid = 0;
         $error_message .= 'Student image is required<br>';
@@ -27,6 +46,9 @@ if (isset($_POST['form1'])) {
         if (!in_array($ext, array('jpg', 'jpeg', 'png', 'gif', 'webp'), true)) {
             $valid = 0;
             $error_message .= 'Student image must be jpg, jpeg, png, gif or webp<br>';
+        } elseif (@getimagesize($tmp) === false) {
+            $valid = 0;
+            $error_message .= 'Student image is not a valid image<br>';
         }
     }
 
@@ -38,7 +60,7 @@ if (isset($_POST['form1'])) {
     }
 
     if ($valid == 1) {
-        $final_name = adminUniqueUploadName('birthday-student', $ext);
+        $final_name = birthdayAddImageName($name, $class_name, $ext);
         if (!adminMoveUploadedFile($tmp, $final_name)) {
             $valid = 0;
             $error_message .= 'Could not save student image. Check uploads folder permissions.<br>';

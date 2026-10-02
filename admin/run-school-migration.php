@@ -72,6 +72,7 @@ try {
               `end_date` date DEFAULT NULL,
               `event_time` varchar(50) NOT NULL DEFAULT '',
               `location` varchar(255) NOT NULL DEFAULT '',
+              `event_color` varchar(7) NOT NULL DEFAULT '#e5262f',
               `status` varchar(20) NOT NULL DEFAULT 'Active',
               `created_at` datetime DEFAULT NULL,
               PRIMARY KEY (`id`),
@@ -81,6 +82,13 @@ try {
         $messages[] = 'Created tbl_calendar_event';
     } else {
         $messages[] = 'Skipped tbl_calendar_event (exists)';
+    }
+
+    if (migrationTableExists($pdo, 'tbl_calendar_event') && !migrationColumnExists($pdo, 'tbl_calendar_event', 'event_color')) {
+        $pdo->exec("ALTER TABLE `tbl_calendar_event` ADD COLUMN `event_color` varchar(7) NOT NULL DEFAULT '#e5262f'");
+        $messages[] = 'Added tbl_calendar_event.event_color';
+    } else {
+        $messages[] = 'Skipped tbl_calendar_event.event_color';
     }
 
     if (migrationTableExists($pdo, 'tbl_staff') && !migrationColumnExists($pdo, 'tbl_staff', 'bio')) {

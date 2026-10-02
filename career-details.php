@@ -40,13 +40,13 @@ echo renderFlash();
 </div>
 
 <div class="card p-4 mb-5">
-    <?php echo nl2br(e($job['description'] ?? '')); ?>
+    <?php echo renderRichHtml($job['description'] ?? ''); ?>
 </div>
 
 <div id="apply" class="card card-hover p-4">
     <h2 class="h4 fw-bold mb-3"><?php echo t('apply_for_job'); ?></h2>
     
-    <form method="post" class="row g-3">
+    <form method="post" class="row g-3" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="<?php echo e(csrfToken()); ?>">
         <input type="hidden" name="career_form" value="1">
         <input type="hidden" name="vacancy_id" value="<?php echo (int)$job['id']; ?>">
@@ -63,13 +63,10 @@ echo renderFlash();
             <label class="form-label"><?php echo t('email_address'); ?> *</label>
             <input class="form-control" type="email" name="email" required>
         </div>
-        <div class="col-12">
-            <label class="form-label"><?php echo t('resume_note'); ?></label>
-            <textarea class="form-control" name="resume_note" rows="3"></textarea>
-        </div>
-        <div class="col-12">
-            <label class="form-label"><?php echo t('cover_letter'); ?></label>
-            <textarea class="form-control" name="cover_letter" rows="5"></textarea>
+        <div class="col-md-6">
+            <label class="form-label">CV / Resume *</label>
+            <input class="form-control" type="file" name="cv_file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
+            <small class="form-text text-muted">PDF, DOC or DOCX, up to 5 MB.</small>
         </div>
         <div class="col-12">
             <button class="btn btn-dark" type="submit"><?php echo t('submit_application'); ?></button>

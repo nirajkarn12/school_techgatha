@@ -1,5 +1,8 @@
 <?php
 function renderBreadcrumbs($items = []) {
+    if (!empty($GLOBALS['pageHeroEnabled'])) {
+        return '';
+    }
     if (empty($items)) {
         return '';
     }

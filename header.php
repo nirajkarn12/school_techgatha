@@ -296,6 +296,7 @@ require_once __DIR__ . '/breadcrumbs.php';
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>blog.php"><?php echo t('blog'); ?></a></li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>careers.php"><?php echo t('careers'); ?></a></li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>contact.php"><?php echo t('contact'); ?></a></li>
+                <li class="nav-item"><a class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2 ms-lg-2" href="<?php echo BASE_URL; ?>admin/login.php"><i class="fa fa-graduation-cap" aria-hidden="true"></i><?php echo t('school_app'); ?></a></li>
             </ul>
             <div class="header-controls d-flex align-items-center gap-2 flex-nowrap ms-auto">
             <form class="header-search-language mb-2 position-relative search-shell" role="search" action="<?php echo BASE_URL; ?>search.php" method="get">

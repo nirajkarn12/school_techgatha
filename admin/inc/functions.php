@@ -1,4 +1,23 @@
 <?php
+function ensureCalendarEventColorColumn($pdo) {
+	static $ready = null;
+	if ($ready !== null) {
+		return $ready;
+	}
+
+	try {
+		$column = $pdo->query("SHOW COLUMNS FROM `tbl_calendar_event` LIKE 'event_color'")->fetch(PDO::FETCH_ASSOC);
+		if (!$column) {
+			$pdo->exec("ALTER TABLE `tbl_calendar_event` ADD COLUMN `event_color` varchar(7) NOT NULL DEFAULT '#e5262f'");
+		}
+		$ready = true;
+	} catch (Throwable $e) {
+		$ready = false;
+	}
+
+	return $ready;
+}
+
 function get_ext($pdo,$fname)
 {
 

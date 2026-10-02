@@ -1,6 +1,8 @@
 <?php require_once('header.php'); ?>
 
 <?php
+ensureCalendarEventColorColumn($pdo);
+
 $error_message = '';
 $success_message = '';
 
@@ -16,9 +18,13 @@ if (isset($_POST['form1'])) {
 	}
 
 	if ($valid == 1) {
+		$eventColor = trim((string) ($_POST['event_color'] ?? '#e5262f'));
+		if (!preg_match('/^#[0-9a-fA-F]{6}$/D', $eventColor)) {
+			$eventColor = '#e5262f';
+		}
 		$statement = $pdo->prepare("
-			INSERT INTO tbl_calendar_event (title, description, event_date, end_date, event_time, location, status, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+			INSERT INTO tbl_calendar_event (title, description, event_date, end_date, event_time, location, event_color, status, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
 		");
 		$endDate = !empty($_POST['end_date']) ? $_POST['end_date'] : null;
 		$statement->execute([
@@ -28,6 +34,7 @@ if (isset($_POST['form1'])) {
 			$endDate,
 			strip_tags($_POST['event_time'] ?? ''),
 			strip_tags($_POST['location'] ?? ''),
+			$eventColor,
 			$_POST['status'] ?? 'Active',
 		]);
 		$success_message = 'Calendar event added successfully.';
@@ -68,6 +75,10 @@ if (isset($_POST['form1'])) {
 						<div class="form-group">
 							<label class="col-sm-2 control-label">Location</label>
 							<div class="col-sm-6"><input type="text" class="form-control" name="location" value="<?php echo htmlspecialchars($_POST['location'] ?? ''); ?>"></div>
+						</div>
+						<div class="form-group">
+							<label class="col-sm-2 control-label">Calendar Color</label>
+							<div class="col-sm-4"><input type="color" class="form-control" name="event_color" value="<?php echo htmlspecialchars($_POST['event_color'] ?? '#e5262f'); ?>" aria-label="Calendar event color"></div>
 						</div>
 						<div class="form-group">
 							<label class="col-sm-2 control-label">Description</label>

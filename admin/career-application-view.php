@@ -44,8 +44,7 @@ if (isset($_POST['form1'])) {
 						<tr><th>Name</th><td><?php echo htmlspecialchars($row['full_name']); ?></td></tr>
 						<tr><th>Phone</th><td><?php echo htmlspecialchars($row['phone']); ?></td></tr>
 						<tr><th>Email</th><td><?php echo htmlspecialchars($row['email']); ?></td></tr>
-						<tr><th>Experience / Resume</th><td><?php echo nl2br(htmlspecialchars((string) $row['resume_note'])); ?></td></tr>
-						<tr><th>Cover letter</th><td><?php echo nl2br(htmlspecialchars((string) $row['cover_letter'])); ?></td></tr>
+						<tr><th>CV / Resume</th><td><?php if (!empty($row['cv_file'])) { ?><a href="<?php echo htmlspecialchars(BASE_URL . 'assets/uploads/career-applications/' . rawurlencode(basename($row['cv_file']))); ?>" target="_blank" rel="noopener">Download CV</a><?php } else { ?>Not provided<?php } ?></td></tr>
 						<tr><th>Submitted</th><td><?php echo htmlspecialchars((string) $row['created_at']); ?></td></tr>
 					</table>
 					<form method="post" class="form-inline" style="margin-top:15px;">

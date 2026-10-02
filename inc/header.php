@@ -101,13 +101,13 @@ $ogLocale = $ogLocaleMap[$currentHtmlLang] ?? 'en_US';
     <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css">
-    <link rel="stylesheet" href="<?php echo ASSET_URL; ?>css/style.css?v=20260724b">
+    <link rel="stylesheet" href="<?php echo ASSET_URL; ?>css/style.css?v=20261001a">
     <style>
     /* Dropdown menu stays open when interacting inside */
     .mega-menu {
@@ -310,32 +310,35 @@ $ogLocale = $ogLocaleMap[$currentHtmlLang] ?? 'en_US';
     <div class="spinner"></div>
 </div>
 <?php } ?>
-<div class="topbar">
-    <div class="container topbar-inner small">
-        <div class="topbar-contact">
-            <span class="topbar-contact-item"><i class="fa fa-phone"></i><?php echo e(getSiteSetting('contact_phone', '+977 9869224134')); ?></span>
-            <span class="topbar-contact-item"><i class="fa fa-envelope"></i><?php echo e(getSiteSetting('contact_email', 'contact@sastikatrading.com.np')); ?></span>
+<?php include __DIR__ . '/partials/marquee-ribbon.php'; ?>
+<div class="brandbar">
+    <div class="container brandbar-inner">
+        <a class="navbar-brand brandbar-brand" href="<?php echo BASE_URL; ?>">
+            <img src="<?php echo getProductImage(getSiteSetting('logo', 'logo.jpg')); ?>" alt="<?php echo t('brand_logo'); ?>">
+            <span><?php echo $siteName; ?></span>
+        </a>
+        <div class="brandbar-contact">
+            <span class="brandbar-contact-item"><i class="fa fa-phone"></i><?php echo e(getSiteSetting('contact_phone', '+977 9869224134')); ?></span>
+            <span class="brandbar-contact-item"><i class="fa fa-envelope"></i><?php echo e(getSiteSetting('contact_email', 'contact@sastikatrading.com.np')); ?></span>
         </div>
-        <div class="topbar-social social-links">
-            <?php foreach (getSocialLinks() as $social) { ?>
-                <a href="<?php echo e($social['url']); ?>" target="_blank" rel="noreferrer" class="social-link" aria-label="<?php echo e($social['name']); ?>">
-                    <i class="<?php echo e($social['icon']); ?>"></i>
-                </a>
-            <?php } ?>
+        <div class="brandbar-actions">
+            <div class="brandbar-social social-links">
+                <?php foreach (getSocialLinks() as $social) { ?>
+                    <a href="<?php echo e($social['url']); ?>" target="_blank" rel="noreferrer" class="social-link" aria-label="<?php echo e($social['name']); ?>">
+                        <i class="<?php echo e($social['icon']); ?>"></i>
+                    </a>
+                <?php } ?>
+            </div>
         </div>
     </div>
 </div>
 <header class="site-header">
-    <nav class="navbar navbar-expand-lg navbar-light container py-3">
-        <a class="navbar-brand" href="<?php echo BASE_URL; ?>">
-            <img src="<?php echo getProductImage(getSiteSetting('logo', 'logo.jpg')); ?>" alt="<?php echo t('brand_logo'); ?>">
-            <span><?php echo $siteName; ?></span>
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="<?php echo t('toggle_navigation'); ?>">
+    <nav class="navbar navbar-expand-lg navbar-dark container py-1">
+        <button class="navbar-toggler ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="<?php echo t('toggle_navigation'); ?>">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="mainNav">
-            <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav mx-auto mb-0">
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>"><?php echo t('home'); ?></a></li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="aboutMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -351,53 +354,100 @@ $ogLocale = $ogLocaleMap[$currentHtmlLang] ?? 'en_US';
                     </ul>
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>products.php"><?php echo t('shop'); ?></a></li>
+                <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>gallery.php"><?php echo t('gallery'); ?></a></li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="mediaMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <?php echo t('media'); ?>
+                    <a class="nav-link dropdown-toggle" href="#" id="newsEventsMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <?php echo t('blog'); ?>
                     </a>
-                    <ul class="dropdown-menu" aria-labelledby="mediaMenuDropdown">
-                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>blog.php"><?php echo t('blog'); ?></a></li>
-                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>gallery.php"><?php echo t('gallery'); ?></a></li>
+                    <ul class="dropdown-menu" aria-labelledby="newsEventsMenuDropdown">
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>blog.php"><?php echo t('blog_nav'); ?></a></li>
+                        <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>reviews.php"><?php echo t('reviews'); ?></a></li>
                         <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>calendar.php"><?php echo t('school_calendar'); ?></a></li>
                         <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>brochure.php"><?php echo t('brochure_prospectus'); ?></a></li>
                     </ul>
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>careers.php"><?php echo t('careers'); ?></a></li>
+                <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>faq.php"><?php echo t('faqs'); ?></a></li>
                 <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>contact.php"><?php echo t('contact'); ?></a></li>
             </ul>
-            <div class="header-controls d-flex align-items-center gap-2 flex-nowrap ms-auto">
-            <div class="d-flex align-items-center gap-2">
-                <?php
-                $currentLang = getCurrentLang();
-                $langFlags = [
-                    'en' => ['src' => ASSET_URL . 'images/flags/gb.svg', 'label' => 'English'],
-                    'ne' => ['src' => ASSET_URL . 'images/flags/np.svg', 'label' => 'नेपाली'],
-                    'hi' => ['src' => ASSET_URL . 'images/flags/in.svg', 'label' => 'हिन्दी'],
-                ];
-                $currentLangFlag = $langFlags[$currentLang] ?? $langFlags['en'];
-                ?>
+            <?php
+            $currentLang = getCurrentLang();
+            $langFlags = [
+                'en' => ['src' => ASSET_URL . 'images/flags/gb.svg', 'label' => 'English'],
+                'ne' => ['src' => ASSET_URL . 'images/flags/np.svg', 'label' => 'नेपाली'],
+                'hi' => ['src' => ASSET_URL . 'images/flags/in.svg', 'label' => 'हिन्दी'],
+            ];
+            $currentLangFlag = $langFlags[$currentLang] ?? $langFlags['en'];
+            ?>
+            <div class="nav-utility-controls">
                 <div class="dropdown language-switcher">
-                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle language-dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <img src="<?php echo $currentLangFlag['src']; ?>" alt="<?php echo e($currentLangFlag['label']); ?>" class="lang-flag">
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle language-dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="<?php echo e($currentLangFlag['label']); ?>">
+                        <img src="<?php echo $currentLangFlag['src']; ?>" alt="" class="lang-flag">
                     </button>
-                    <ul class="dropdown-menu">
+                    <ul class="dropdown-menu dropdown-menu-end">
                         <?php foreach ($langFlags as $code => $data) { ?>
                             <li>
                                 <a class="dropdown-item d-flex align-items-center gap-2<?php echo $currentLang === $code ? ' active' : ''; ?>" href="<?php echo e(langSwitchUrl($code)); ?>">
-                                    <img src="<?php echo $data['src']; ?>" alt="<?php echo e($data['label']); ?>" class="lang-flag">
+                                    <img src="<?php echo $data['src']; ?>" alt="" class="lang-flag">
                                     <span><?php echo e($data['label']); ?></span>
                                 </a>
                             </li>
                         <?php } ?>
                     </ul>
                 </div>
-                <a href="<?php echo BASE_URL; ?>admission.php" class="btn btn-dark btn-sm"><?php echo t('admission_form'); ?></a>
-            </div>
+                <a href="<?php echo BASE_URL; ?>admin/login.php" class="btn btn-outline-light btn-sm nav-login"><?php echo t('login'); ?></a>
+                <a href="<?php echo BASE_URL; ?>admission.php" class="btn btn-light btn-sm nav-admission"><?php echo t('admission_form'); ?></a>
             </div>
         </div>
     </nav>
 </header>
-<main class="site-main<?php echo !empty($fullWidth) ? ' is-fullwidth' : ''; ?>">
+<?php
+$pageHeroEnabled = basename((string)($_SERVER['SCRIPT_NAME'] ?? '')) !== 'index.php';
+$GLOBALS['pageHeroEnabled'] = $pageHeroEnabled;
+$pageHeroTitle = trim(strip_tags((string)($pageHeroTitle ?? $pageTitle ?? '')));
+if ($pageHeroTitle === '') {
+    $pageHeroTitle = SITE_NAME;
+}
+$pageHeroImage = ASSET_URL . 'images/cleaning-hero.jpg';
+if ($pageHeroEnabled) {
+    try {
+        $heroPhoto = $pdo->query('SELECT photo FROM tbl_slider ORDER BY id ASC LIMIT 1')->fetchColumn();
+        if (is_string($heroPhoto) && trim($heroPhoto) !== '') {
+            $pageHeroImage = getProductImage($heroPhoto);
+        }
+    } catch (Throwable $e) {
+    }
+}
+?>
+<main class="site-main<?php echo !empty($fullWidth) ? ' is-fullwidth' : ''; ?><?php echo $pageHeroEnabled ? ' has-page-hero' : ''; ?>">
+    <?php if ($pageHeroEnabled) { ?>
+    <section class="page-hero-banner" aria-labelledby="pageHeroTitle">
+        <img class="page-hero-image" src="<?php echo e($pageHeroImage); ?>" alt="" fetchpriority="high">
+        <div class="page-hero-shade"></div>
+        <div class="container page-hero-inner">
+            <div class="page-hero-copy">
+                <h1 id="pageHeroTitle"><?php echo e($pageHeroTitle); ?></h1>
+                <nav aria-label="breadcrumb" class="page-hero-breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="<?php echo BASE_URL; ?>"><?php echo t('home'); ?></a></li>
+                        <li class="breadcrumb-item active" aria-current="page"><?php echo e($pageHeroTitle); ?></li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </section>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var pageMain = document.querySelector('.site-main.has-page-hero');
+        if (!pageMain) return;
+        var pageHeading = Array.prototype.find.call(
+            pageMain.querySelectorAll('h1, h2.section-title'),
+            function (heading) { return !heading.closest('.page-hero-banner'); }
+        );
+        if (pageHeading) pageHeading.hidden = true;
+    });
+    </script>
+    <?php } ?>
     <?php if (empty($fullWidth)) { ?>
     <div class="container page-wrap py-4">
         <?php echo renderFlash(); ?>

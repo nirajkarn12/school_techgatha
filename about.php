@@ -3,6 +3,7 @@ require_once __DIR__ . '/inc/functions.php';
 
 $aboutSeo = getStaticPageSeo('about');
 $pageTitle = $aboutSeo['title'];
+$pageHeroTitle = loadLang('about_us_nav');
 $metaKeywords = $aboutSeo['keywords'];
 $metaDescription = $aboutSeo['description'];
 

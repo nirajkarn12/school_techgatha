@@ -39,6 +39,8 @@ try {
               `email` varchar(150) NOT NULL DEFAULT '',
               `resume_note` text,
               `cover_letter` text,
+              `cv_file` varchar(255) NOT NULL DEFAULT '',
+              `image_file` varchar(255) NOT NULL DEFAULT '',
               `status` varchar(30) NOT NULL DEFAULT 'New',
               `created_at` datetime DEFAULT NULL,
               PRIMARY KEY (`id`),
@@ -48,6 +50,17 @@ try {
         $messages[] = 'Created tbl_career_application';
     } else {
         $messages[] = 'Skipped tbl_career_application (exists)';
+    }
+
+    $applicationColumns = $pdo->query('SHOW COLUMNS FROM `tbl_career_application`')->fetchAll(PDO::FETCH_COLUMN);
+    foreach (array(
+        'cv_file' => "varchar(255) NOT NULL DEFAULT ''",
+        'image_file' => "varchar(255) NOT NULL DEFAULT ''"
+    ) as $column => $definition) {
+        if (!in_array($column, $applicationColumns, true)) {
+            $pdo->exec('ALTER TABLE `tbl_career_application` ADD COLUMN `' . $column . '` ' . $definition);
+            $messages[] = 'Added ' . $column . ' to tbl_career_application';
+        }
     }
 } catch (Throwable $e) {
     $errors[] = $e->getMessage();

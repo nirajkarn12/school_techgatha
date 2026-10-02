@@ -139,6 +139,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
+        if (document.querySelector('.homeTestimonialsSwiper')) {
+            new Swiper('.homeTestimonialsSwiper', {
+                slidesPerView: 1,
+                spaceBetween: 0,
+                loop: slideCount('.homeTestimonialsSwiper') > 1,
+                speed: 700,
+                autoplay: { delay: 5200, disableOnInteraction: false, pauseOnMouseEnter: true },
+                pagination: { el: '.home-testimonials-dots', clickable: true },
+            });
+        }
     }
 
     const revealItems = document.querySelectorAll('.reveal');
